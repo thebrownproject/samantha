@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from samantha.config import Config
-from samantha.storage import bootstrap_storage, PROFILE_TEMPLATE, PREFERENCES_TEMPLATE
+from samantha.storage import PREFERENCES_TEMPLATE, PROFILE_TEMPLATE, bootstrap_storage
 
 
 def _make_config(tmp_path: Path) -> Config:
@@ -72,6 +72,7 @@ def test_template_preferences_has_structure():
 
 def test_bootstrap_raises_on_permission_error(tmp_path):
     import os
+
     import pytest
 
     blocked = tmp_path / "noaccess"

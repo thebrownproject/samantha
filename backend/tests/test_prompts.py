@@ -2,7 +2,6 @@
 
 from samantha.prompts import DELEGATION_PROMPT, SYSTEM_PROMPT
 
-
 # -- Memory section tests --
 
 

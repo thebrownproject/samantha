@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from enum import StrEnum
-from typing import Any
+from typing import Any, ClassVar
 
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
@@ -63,18 +64,14 @@ class WSServer:
     async def send_json(self, msg: dict[str, Any]) -> None:
         if self._ws is None:
             return
-        try:
+        with contextlib.suppress(ConnectionClosed):
             await self._ws.send(json.dumps(msg))
-        except ConnectionClosed:
-            pass
 
     async def send_audio(self, data: bytes) -> None:
         if self._ws is None:
             return
-        try:
+        with contextlib.suppress(ConnectionClosed):
             await self._ws.send(data)
-        except ConnectionClosed:
-            pass
 
     async def _handler(self, ws: ServerConnection) -> None:
         if self._ws is not None:
@@ -153,7 +150,7 @@ class WSServer:
         self.injected_contexts.append(text)
         logger.debug("Context injected: %s", text[:80])
 
-    _text_handlers: dict[str, Any] = {
+    _text_handlers: ClassVar[dict[str, Any]] = {
         "start_listening": _on_start_listening,
         "stop_listening": _on_stop_listening,
         "interrupt": _on_interrupt,

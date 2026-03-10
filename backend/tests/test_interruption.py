@@ -112,7 +112,7 @@ class TestInterruptionIntegration:
 
     def test_state_sequence_through_interruption(self, wired_dispatcher):
         """Full flow: idle -> speaking -> interrupted -> listening -> speaking -> idle."""
-        d, h = wired_dispatcher
+        d, _h = wired_dispatcher
         states = []
         d.on_state_change(states.append)
 
@@ -137,6 +137,6 @@ class TestInterruptionIntegration:
         assert result.new_state == AppState.LISTENING
 
     def test_clear_playback_not_emitted_when_idle(self, wired_dispatcher):
-        d, h = wired_dispatcher
+        _d, h = wired_dispatcher
         result = h.handle_speech_started()
         assert result.clear_playback is False

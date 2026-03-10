@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from enum import StrEnum
-from typing import Any, Callable
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +111,8 @@ class EventDispatcher:
         if new == self.state:
             return
         self.state = new
-        msg = msg_state_change(new)
         for cb in self._on_state_change:
             cb(new)
-        # Return value unused; callbacks are side-effect-only
 
     def handle_event(self, event: Any) -> None:
         """Dispatch a single realtime session event."""
@@ -185,7 +184,7 @@ class EventDispatcher:
             self._set_state(AppState.LISTENING)
 
     # Handler dispatch table
-    _handlers: dict[str, Callable[[EventDispatcher, Any], None]] = {
+    _handlers: ClassVar[dict[str, Callable[[EventDispatcher, Any], None]]] = {
         "audio": _handle_audio,
         "audio_end": _handle_audio_end,
         "audio_interrupted": _handle_audio_interrupted,

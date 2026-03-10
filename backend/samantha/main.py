@@ -31,7 +31,7 @@ async def _run() -> None:
                 mcp_servers = []
 
     try:
-        agent, runner_config = create_voice_agent(cfg, mcp_servers=mcp_servers or None)
+        agent, _runner_config = create_voice_agent(cfg, mcp_servers=mcp_servers or None)
         logger.info("Agent '%s' initialized with model '%s'", agent.name, cfg.model_name)
         if mcp_servers:
             logger.info("MCP servers active: %d", len(mcp_servers))
