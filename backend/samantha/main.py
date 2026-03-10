@@ -5,6 +5,7 @@ import logging
 
 from samantha.agents import create_voice_agent
 from samantha.config import load_config
+from samantha.mcp_integration import create_mcp_server
 from samantha.storage import bootstrap_storage
 
 logger = logging.getLogger(__name__)
@@ -16,11 +17,34 @@ async def _run() -> None:
     bootstrap_storage(cfg)
     logging.basicConfig(level=cfg.log_level)
 
-    agent, runner_config = create_voice_agent(cfg)
-    logger.info("Agent '%s' initialized with model '%s'", agent.name, cfg.model_name)
+    mcp_server = create_mcp_server(cfg)
+    mcp_servers = [mcp_server] if mcp_server else []
 
-    # ws_server will use agent + runner_config to start the session
-    # (wired in task sam-0up.1)
+    if mcp_servers:
+        # MCPServerStdio supports connect/cleanup lifecycle
+        for server in mcp_servers:
+            try:
+                await server.connect()
+                logger.info("MCP server connected")
+            except Exception:
+                logger.warning("MCP server failed to connect, continuing without it", exc_info=True)
+                mcp_servers = []
+
+    try:
+        agent, runner_config = create_voice_agent(cfg, mcp_servers=mcp_servers or None)
+        logger.info("Agent '%s' initialized with model '%s'", agent.name, cfg.model_name)
+        if mcp_servers:
+            logger.info("MCP servers active: %d", len(mcp_servers))
+
+        # ws_server will use agent + runner_config to start the session
+        # (wired in task sam-0up.1)
+    finally:
+        for server in mcp_servers:
+            try:
+                await server.cleanup()
+                logger.info("MCP server cleaned up")
+            except Exception:
+                logger.warning("MCP server cleanup failed", exc_info=True)
 
 
 def main() -> None:
