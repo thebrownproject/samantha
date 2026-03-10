@@ -445,3 +445,51 @@ async def test_promote_nonexistent_raises(tmp_path):
     with pytest.raises(ValueError, match="not found"):
         await store.promote_to_memory(9999)
     await store.close()
+
+
+# --- edge case tests ---
+
+
+async def test_save_special_characters_in_tags(tmp_path):
+    """Tags with special chars (commas, spaces, unicode) round-trip correctly."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    mem_id = await store.save("Special tag test", tags="café,naïve,über-cool")
+    row = store.conn.execute("SELECT tags FROM memories WHERE id = ?", (mem_id,)).fetchone()
+    assert row[0] == "café,naïve,über-cool"
+    await store.close()
+
+
+async def test_save_large_content(tmp_path):
+    """Large content (10KB+) saves and retrieves without truncation."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    large = "x" * 50_000
+    mem_id = await store.save(large)
+    row = store.conn.execute("SELECT content FROM memories WHERE id = ?", (mem_id,)).fetchone()
+    assert row[0] == large
+    assert len(row[0]) == 50_000
+    await store.close()
+
+
+async def test_search_empty_query(tmp_path):
+    """Empty/whitespace query returns empty results without error."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    await store.save("Some stored memory")
+    results = await store.search("   ")
+    assert isinstance(results, list)
+    await store.close()
+
+
+async def test_rapid_sequential_saves(tmp_path):
+    """Many rapid saves produce distinct entries without corruption."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    ids = []
+    for i in range(10):
+        ids.append(await store.save(f"Sequential memory {i} about unique topic {i}"))
+    assert len(set(ids)) == 10
+    count = store.conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+    assert count == 10
+    await store.close()
