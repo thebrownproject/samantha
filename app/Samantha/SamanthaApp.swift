@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let orbController = OrbWindowController()
     let hotkeyManager = HotkeyManager()
 
+    /// Convenience accessor for WebSocket integration (sam-0up).
+    var transcriptStore: TranscriptStore { orbController.transcriptStore }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         hotkeyManager.delegate = self
         orbController.showWindow()

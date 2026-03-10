@@ -50,6 +50,8 @@ final class OrbWindowController {
 
     private var panel: OrbPanel?
     let orbState = OrbState()
+    let transcriptStore = TranscriptStore()
+    private(set) var transcriptController: TranscriptPanelController?
 
     func showWindow() {
         if panel != nil {
@@ -84,6 +86,7 @@ final class OrbWindowController {
         self.panel = panel
 
         startTrackingPosition()
+        setupTranscriptPanel()
     }
 
     func hideWindow() {
@@ -100,6 +103,13 @@ final class OrbWindowController {
         )
     }
 
+    private func setupTranscriptPanel() {
+        guard let panel else { return }
+        let controller = TranscriptPanelController(store: transcriptStore)
+        controller.showPanel(relativeTo: panel.frame)
+        transcriptController = controller
+    }
+
     /// Poll window origin after drags and persist to UserDefaults.
     private func startTrackingPosition() {
         NotificationCenter.default.addObserver(
@@ -108,8 +118,9 @@ final class OrbWindowController {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let origin = self.panel?.frame.origin else { return }
-                self.orbState.windowOrigin = origin
+                guard let self, let frame = self.panel?.frame else { return }
+                self.orbState.windowOrigin = frame.origin
+                self.transcriptController?.repositionPanel(orbFrame: frame)
             }
         }
     }

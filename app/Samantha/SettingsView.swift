@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("safeModeEnabled") private var safeModeEnabled = true
     @AppStorage("confirmDestructive") private var confirmDestructive = true
     @AppStorage("memoryEnabled") private var memoryEnabled = true
+    @AppStorage("transcriptVisible") private var transcriptVisible = false
 
     var body: some View {
         Form {
@@ -106,6 +107,11 @@ struct SettingsView: View {
 
             Toggle("Memory", isOn: $memoryEnabled)
             Text("Store and recall conversation context across sessions.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle("Show transcript", isOn: $transcriptVisible)
+            Text("Display live transcript near the orb.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
