@@ -8,6 +8,13 @@ enum AudioConstants {
     static let sampleRate: Double = 24000
     static let captureBufferSize: AVAudioFrameCount = 1024
     static let channels: AVAudioChannelCount = 1
+
+    static let pcm16Format: AVAudioFormat = AVAudioFormat(
+        commonFormat: .pcmFormatInt16,
+        sampleRate: sampleRate,
+        channels: channels,
+        interleaved: true
+    )!
 }
 
 @MainActor
@@ -152,13 +159,7 @@ final class AudioManager: ObservableObject {
         let player = AVAudioPlayerNode()
         engine.attach(player)
 
-        let playbackFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
-            sampleRate: AudioConstants.sampleRate,
-            channels: AudioConstants.channels,
-            interleaved: true
-        )!
-        engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
+        engine.connect(player, to: engine.mainMixerNode, format: AudioConstants.pcm16Format)
 
         if !engine.isRunning {
             engine.prepare()
@@ -175,20 +176,15 @@ final class AudioManager: ObservableObject {
         let frameCount = AVAudioFrameCount(data.count / bytesPerSample)
         guard frameCount > 0 else { return nil }
 
-        let format = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
-            sampleRate: AudioConstants.sampleRate,
-            channels: AudioConstants.channels,
-            interleaved: true
-        )!
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: AudioConstants.pcm16Format, frameCapacity: frameCount) else {
             return nil
         }
         buffer.frameLength = frameCount
 
+        guard let channelData = buffer.int16ChannelData else { return nil }
         data.withUnsafeBytes { raw in
             guard let src = raw.baseAddress else { return }
-            memcpy(buffer.int16ChannelData![0], src, data.count)
+            memcpy(channelData[0], src, data.count)
         }
         return buffer
     }
@@ -206,12 +202,14 @@ final class AudioManager: ObservableObject {
             throw AudioCaptureError.invalidInputFormat
         }
 
-        let targetFormat = AVAudioFormat(
+        guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: AudioConstants.sampleRate,
             channels: AudioConstants.channels,
             interleaved: false
-        )!
+        ) else {
+            throw AudioCaptureError.invalidInputFormat
+        }
 
         // Mixer handles multi-channel -> mono downmix and provides a stable tap point.
         let mixer = AVAudioMixerNode()

@@ -8,16 +8,19 @@ enum KeychainHelper {
     private static let service = "com.thebrownproject.samantha"
     private static let apiKeyAccount = "OpenAIAPIKey"
 
+    private static var baseQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: apiKeyAccount
+        ]
+    }
+
     @discardableResult
     static func saveAPIKey(_ key: String) -> Bool {
         guard let data = key.data(using: .utf8) else { return false }
 
         // Delete-before-add to avoid errSecDuplicateItem
-        let baseQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: apiKeyAccount
-        ]
         let deleteStatus = SecItemDelete(baseQuery as CFDictionary)
         if deleteStatus != errSecSuccess && deleteStatus != errSecItemNotFound {
             log.error("Failed to clear existing API key (status: \(deleteStatus))")
@@ -37,13 +40,9 @@ enum KeychainHelper {
     }
 
     static func loadAPIKey() -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: apiKeyAccount,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -58,12 +57,7 @@ enum KeychainHelper {
 
     @discardableResult
     static func deleteAPIKey() -> Bool {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: apiKeyAccount
-        ]
-        let status = SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(baseQuery as CFDictionary)
         if status == errSecSuccess || status == errSecItemNotFound {
             log.info("API key deleted from Keychain")
             return true

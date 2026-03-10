@@ -7,7 +7,6 @@ struct TranscriptEntry: Identifiable {
     let role: String
     var text: String
     var isFinal: Bool
-    let timestamp: Date
 
     var isUser: Bool { role == "user" }
 }
@@ -25,14 +24,13 @@ final class TranscriptStore: ObservableObject {
 
     init() {
         isVisible = UserDefaults.standard.bool(forKey: Self.visibilityKey)
-        // Sync with @AppStorage changes from SettingsView.
-        defaultsObserver = NotificationCenter.default
-            .publisher(for: UserDefaults.didChangeNotification)
+        // Observe specific key via KVO instead of all UserDefaults changes.
+        defaultsObserver = UserDefaults.standard
+            .publisher(for: \.transcriptVisible)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                let stored = UserDefaults.standard.bool(forKey: Self.visibilityKey)
-                if self.isVisible != stored { self.isVisible = stored }
+            .sink { [weak self] newValue in
+                guard let self, self.isVisible != newValue else { return }
+                self.isVisible = newValue
             }
     }
 
@@ -43,7 +41,7 @@ final class TranscriptStore: ObservableObject {
             entries[entries.count - 1].text = text
             entries[entries.count - 1].isFinal = isFinal
         } else {
-            entries.append(TranscriptEntry(role: role, text: text, isFinal: isFinal, timestamp: .now))
+            entries.append(TranscriptEntry(role: role, text: text, isFinal: isFinal))
         }
         if entries.count > Self.maxEntries {
             entries.removeFirst(entries.count - Self.maxEntries)
@@ -52,6 +50,12 @@ final class TranscriptStore: ObservableObject {
 
     func clear() {
         entries.removeAll()
+    }
+}
+
+extension UserDefaults {
+    @objc dynamic var transcriptVisible: Bool {
+        bool(forKey: TranscriptStore.visibilityKey)
     }
 }
 
@@ -112,14 +116,8 @@ private struct TranscriptBubble: View {
 // MARK: - Transcript Panel
 
 @MainActor
-final class TranscriptPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-}
-
-@MainActor
 final class TranscriptPanelController {
-    private var panel: TranscriptPanel?
+    private var panel: FloatingPanel?
     private let store: TranscriptStore
     private var visibilityObserver: AnyCancellable?
 
@@ -139,7 +137,7 @@ final class TranscriptPanelController {
         let size = NSSize(width: 260, height: 200)
         hosting.frame = NSRect(origin: .zero, size: size)
 
-        let panel = TranscriptPanel(
+        let panel = FloatingPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,

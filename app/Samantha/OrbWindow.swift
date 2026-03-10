@@ -19,24 +19,27 @@ final class OrbState: ObservableObject {
     @Published var windowOrigin: CGPoint? {
         didSet {
             guard let origin = windowOrigin else { return }
-            UserDefaults.standard.set(origin.x, forKey: "orbX")
-            UserDefaults.standard.set(origin.y, forKey: "orbY")
+            UserDefaults.standard.set(origin.x, forKey: Self.orbXKey)
+            UserDefaults.standard.set(origin.y, forKey: Self.orbYKey)
         }
     }
 
+    private static let orbXKey = "orbX"
+    private static let orbYKey = "orbY"
+
     func loadSavedPosition() -> CGPoint? {
-        let x = UserDefaults.standard.double(forKey: "orbX")
-        let y = UserDefaults.standard.double(forKey: "orbY")
-        guard x != 0 || y != 0 else { return nil }
+        guard UserDefaults.standard.object(forKey: Self.orbXKey) != nil else { return nil }
+        let x = UserDefaults.standard.double(forKey: Self.orbXKey)
+        let y = UserDefaults.standard.double(forKey: Self.orbYKey)
         return CGPoint(x: x, y: y)
     }
 }
 
-// MARK: - OrbPanel
+// MARK: - FloatingPanel
 
-/// Borderless, non-activating, always-on-top NSPanel for the orb.
+/// Borderless, non-activating, always-on-top NSPanel. Shared by orb and transcript.
 @MainActor
-final class OrbPanel: NSPanel {
+class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
@@ -48,7 +51,7 @@ final class OrbPanel: NSPanel {
 final class OrbWindowController {
     static let orbSize: CGFloat = 80
 
-    private var panel: OrbPanel?
+    private var panel: FloatingPanel?
     let orbState = OrbState()
     let transcriptStore = TranscriptStore()
     private(set) var transcriptController: TranscriptPanelController?
@@ -64,7 +67,7 @@ final class OrbWindowController {
         let size = NSSize(width: Self.orbSize, height: Self.orbSize)
         hosting.frame = NSRect(origin: .zero, size: size)
 
-        let panel = OrbPanel(
+        let panel = FloatingPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,

@@ -16,7 +16,7 @@ struct SettingsView: View {
     @AppStorage("safeModeEnabled") private var safeModeEnabled = true
     @AppStorage("confirmDestructive") private var confirmDestructive = true
     @AppStorage("memoryEnabled") private var memoryEnabled = true
-    @AppStorage("transcriptVisible") private var transcriptVisible = false
+    @AppStorage(TranscriptStore.visibilityKey) private var transcriptVisible = false
 
     var body: some View {
         Form {
