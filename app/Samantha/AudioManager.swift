@@ -4,7 +4,7 @@ import os
 
 private let log = Logger(subsystem: "com.samantha.app", category: "AudioManager")
 
-private enum AudioConstants {
+enum AudioConstants {
     static let sampleRate: Double = 24000
     static let captureBufferSize: AVAudioFrameCount = 1024
     static let channels: AVAudioChannelCount = 1
@@ -13,6 +13,7 @@ private enum AudioConstants {
 @MainActor
 final class AudioManager: ObservableObject {
     @Published private(set) var isCapturing = false
+    @Published private(set) var isPlaying = false
     @Published private(set) var permissionGranted = false
 
     private var audioEngine: AVAudioEngine?
@@ -20,6 +21,12 @@ final class AudioManager: ObservableObject {
     private var mixerNode: AVAudioMixerNode?
     private let audioQueue = DispatchQueue(label: "com.samantha.audio-capture")
     private var capturing = false // audioQueue-only flag
+
+    private var playerNode: AVAudioPlayerNode?
+    private let playbackQueue = DispatchQueue(label: "com.samantha.audio-playback")
+    private var playbackEpoch: UInt64 = 0 // incremented on stop to discard stale callbacks
+    private var samplesScheduled: UInt64 = 0
+    private var samplesPlayed: UInt64 = 0
 
     // MARK: - Permission
 
@@ -59,12 +66,131 @@ final class AudioManager: ObservableObject {
     }
 
     func stopCapture() {
+        playbackQueue.async { [weak self] in
+            guard let self else { return }
+            self.playbackEpoch &+= 1
+            self.samplesScheduled = 0
+            self.samplesPlayed = 0
+        }
         audioQueue.async { [weak self] in
             guard let self else { return }
             self.capturing = false
             self.teardown()
         }
         isCapturing = false
+        isPlaying = false
+    }
+
+    // MARK: - Playback
+
+    /// Enqueue PCM16 24kHz mono audio bytes for immediate playback.
+    /// Lazily attaches a player node to the engine if needed.
+    func enqueueAudio(data: Data) {
+        playbackQueue.async { [weak self] in
+            guard let self else { return }
+
+            do {
+                try self.ensurePlayerReady()
+            } catch {
+                log.error("Playback engine setup failed: \(error.localizedDescription)")
+                return
+            }
+
+            guard let player = self.playerNode,
+                  let buffer = self.pcm16DataToBuffer(data) else { return }
+
+            let epoch = self.playbackEpoch
+            let scheduled = UInt64(buffer.frameLength)
+            self.samplesScheduled += scheduled
+
+            let wasIdle = self.samplesPlayed >= (self.samplesScheduled - scheduled)
+            if wasIdle {
+                DispatchQueue.main.async { self.isPlaying = true }
+            }
+
+            player.scheduleBuffer(buffer) { [weak self] in
+                self?.playbackQueue.async {
+                    guard let self, self.playbackEpoch == epoch else { return }
+                    self.samplesPlayed += scheduled
+                    if self.samplesPlayed >= self.samplesScheduled {
+                        DispatchQueue.main.async { self.isPlaying = false }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Immediately halt playback and discard all scheduled buffers.
+    func stopPlayback() {
+        playbackQueue.async { [weak self] in
+            guard let self else { return }
+            self.playbackEpoch &+= 1
+            self.samplesScheduled = 0
+            self.samplesPlayed = 0
+            self.playerNode?.stop()
+            DispatchQueue.main.async { self.isPlaying = false }
+            log.debug("Playback stopped (epoch \(self.playbackEpoch))")
+        }
+    }
+
+    /// Attach and connect playerNode to the shared engine. Starts engine if not running.
+    /// Re-calls play() if the node exists but was stopped.
+    private func ensurePlayerReady() throws {
+        if let player = playerNode {
+            if !player.isPlaying { player.play() }
+            return
+        }
+
+        let engine: AVAudioEngine
+        if let existing = self.audioEngine {
+            engine = existing
+        } else {
+            engine = AVAudioEngine()
+            self.audioEngine = engine
+        }
+
+        let player = AVAudioPlayerNode()
+        engine.attach(player)
+
+        let playbackFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: AudioConstants.sampleRate,
+            channels: AudioConstants.channels,
+            interleaved: true
+        )!
+        engine.connect(player, to: engine.mainMixerNode, format: playbackFormat)
+
+        if !engine.isRunning {
+            engine.prepare()
+            try engine.start()
+        }
+
+        player.play()
+        self.playerNode = player
+        log.info("Playback player node attached and playing")
+    }
+
+    private func pcm16DataToBuffer(_ data: Data) -> AVAudioPCMBuffer? {
+        let bytesPerSample = 2
+        let frameCount = AVAudioFrameCount(data.count / bytesPerSample)
+        guard frameCount > 0 else { return nil }
+
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: AudioConstants.sampleRate,
+            channels: AudioConstants.channels,
+            interleaved: true
+        )!
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return nil
+        }
+        buffer.frameLength = frameCount
+
+        data.withUnsafeBytes { raw in
+            guard let src = raw.baseAddress else { return }
+            memcpy(buffer.int16ChannelData![0], src, data.count)
+        }
+        return buffer
     }
 
     // MARK: - Engine Setup (audioQueue)
@@ -151,6 +277,8 @@ final class AudioManager: ObservableObject {
     }
 
     private func teardown() {
+        playerNode?.stop()
+        playerNode = nil
         audioEngine?.stop()
         mixerNode?.removeTap(onBus: 0)
         audioEngine = nil
