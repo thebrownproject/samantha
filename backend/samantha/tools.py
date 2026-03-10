@@ -146,7 +146,7 @@ async def _reason_deeply(task: str) -> str:
 
 @function_tool
 async def reason_deeply(task: str) -> str:
-    """Delegate to a reasoning specialist for deeper analysis and return a concise answer."""
+    """Delegate complex reasoning to a specialist. Use for multi-step analysis, math, code review, planning, or comparisons that need deeper thought. Returns a concise answer for voice delivery."""
     return await _reason_deeply(task)
 
 
