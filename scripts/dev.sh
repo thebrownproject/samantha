@@ -53,7 +53,7 @@ bold "Running health checks ..."
 python -c "import samantha; print(f'samantha {samantha.__version__}')" \
     || fail "Cannot import samantha"
 
-python -c "import openai_agents" 2>/dev/null \
+python -c "import agents" 2>/dev/null \
     && green "openai-agents OK" \
     || red "WARN: openai-agents import failed (may need OPENAI_API_KEY at runtime)"
 
