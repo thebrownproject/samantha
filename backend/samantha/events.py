@@ -8,6 +8,22 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+_VALID_ROLES = {"user", "assistant"}
+
+
+def normalize_transcript(text: str, role: str, final: bool = False) -> dict[str, Any] | None:
+    """Normalize a transcript fragment into a stable IPC payload.
+
+    Returns None if text is empty after stripping (suppresses blank partials).
+    """
+    cleaned = text.strip() if text else ""
+    if not cleaned:
+        return None
+    if role not in _VALID_ROLES:
+        logger.warning("Unknown transcript role %r, defaulting to 'assistant'", role)
+        role = "assistant"
+    return msg_transcript(role, cleaned, final=final)
+
 
 class AppState(StrEnum):
     IDLE = "idle"
@@ -39,6 +55,10 @@ def msg_tool_end(name: str, result: str | None = None) -> dict[str, Any]:
     if result is not None:
         msg["result"] = result
     return msg
+
+
+def msg_clear_playback() -> dict[str, str]:
+    return {"type": "clear_playback"}
 
 
 def msg_error(message: str) -> dict[str, str]:
@@ -109,6 +129,14 @@ class EventDispatcher:
             logger.debug("Ignoring unknown event type: %s", etype)
 
     # -- Per-event-type handlers --
+
+    def emit_transcript(self, text: str, role: str, final: bool = False) -> None:
+        """Normalize and dispatch a transcript event."""
+        msg = normalize_transcript(text, role, final=final)
+        if msg is None:
+            return
+        for cb in self._on_transcript:
+            cb(msg)
 
     def _handle_audio(self, event: Any) -> None:
         self._set_state(AppState.SPEAKING)
