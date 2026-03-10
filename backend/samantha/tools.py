@@ -1,14 +1,18 @@
-"""Tool definitions: bash, file_read, file_write."""
+"""Tool definitions: bash, file_read, file_write, reason_deeply."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import shlex
 from pathlib import Path
 
-from agents import function_tool
+from agents import Agent, Runner, function_tool
 
 from samantha.config import Config
+from samantha.prompts import DELEGATION_PROMPT
+
+logger = logging.getLogger(__name__)
 
 _cfg: Config = Config()
 
@@ -120,6 +124,32 @@ async def file_write(path: str, content: str) -> str:
     return await _file_write(path, content)
 
 
+MAX_DELEGATION_OUTPUT = 2048
+
+
+async def _reason_deeply(task: str) -> str:
+    agent = Agent(
+        name="reasoning_specialist",
+        model=_cfg.reasoning_model,
+        instructions=DELEGATION_PROMPT,
+    )
+    try:
+        result = await Runner.run(agent, input=task, max_turns=1)
+        output = str(result.final_output)
+    except Exception:
+        logger.exception("reason_deeply failed")
+        return "I wasn't able to complete that analysis. Could you try rephrasing?"
+    if len(output) > MAX_DELEGATION_OUTPUT:
+        output = output[:MAX_DELEGATION_OUTPUT] + "..."
+    return output
+
+
+@function_tool
+async def reason_deeply(task: str) -> str:
+    """Delegate to a reasoning specialist for deeper analysis and return a concise answer."""
+    return await _reason_deeply(task)
+
+
 def configure_tools(config: Config) -> None:
     """Set module-level config used by tools at runtime."""
     global _cfg
@@ -130,4 +160,4 @@ def register_tools(config: Config | None = None) -> list:
     """Register and return all available tools."""
     if config:
         configure_tools(config)
-    return [safe_bash, file_read, file_write]
+    return [safe_bash, file_read, file_write, reason_deeply]

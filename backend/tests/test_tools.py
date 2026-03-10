@@ -1,6 +1,7 @@
-"""Tests for tools module -- bash, file_read, file_write."""
+"""Tests for tools module -- bash, file_read, file_write, reason_deeply."""
 
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -8,6 +9,7 @@ from samantha.config import Config
 from samantha.tools import (
     _file_read,
     _file_write,
+    _reason_deeply,
     _safe_bash,
     configure_tools,
     register_tools,
@@ -145,10 +147,41 @@ async def test_write_safe_mode_blocks_outside_home():
 
 def test_register_tools_returns_all():
     tools = register_tools()
-    assert len(tools) == 3
+    assert len(tools) == 4
 
 
 def test_register_tools_with_config():
     cfg = Config(safe_mode=False)
     tools = register_tools(cfg)
-    assert len(tools) == 3
+    assert len(tools) == 4
+
+
+def test_register_tools_includes_reason_deeply():
+    tools = register_tools()
+    names = [t.name for t in tools]
+    assert "reason_deeply" in names
+
+
+# -- reason_deeply --
+
+async def test_reason_deeply_returns_string():
+    mock_result = AsyncMock()
+    mock_result.final_output = "The answer is 42."
+    with patch("samantha.tools.Runner.run", new_callable=AsyncMock, return_value=mock_result):
+        result = await _reason_deeply("What is the meaning of life?")
+    assert result == "The answer is 42."
+
+
+async def test_reason_deeply_truncates_long_output():
+    mock_result = AsyncMock()
+    mock_result.final_output = "x" * 3000
+    with patch("samantha.tools.Runner.run", new_callable=AsyncMock, return_value=mock_result):
+        result = await _reason_deeply("Generate a long response")
+    assert len(result) == 2048 + 3  # truncated + "..."
+    assert result.endswith("...")
+
+
+async def test_reason_deeply_handles_error():
+    with patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=RuntimeError("API down")):
+        result = await _reason_deeply("This will fail")
+    assert "wasn't able to complete" in result
