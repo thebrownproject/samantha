@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from samantha.agents import create_voice_agent
-from samantha.config import Config, load_config
+from samantha.config import load_config
 from samantha.storage import bootstrap_storage
 
 logger = logging.getLogger(__name__)
