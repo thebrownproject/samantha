@@ -164,13 +164,22 @@ DELEGATION_FALLBACK = (
 
 
 async def _reason_deeply(task: str) -> str:
+    import time
+    import uuid
+
+    correlation_id = uuid.uuid4().hex[:12]
+    model = _cfg.reasoning_model
     agent = Agent(
         name="reasoning_specialist",
-        model=_cfg.reasoning_model,
+        model=model,
         instructions=DELEGATION_PROMPT,
     )
     last_err: Exception | None = None
     attempts = 1 + _cfg.delegation_max_retries
+    t_start = time.monotonic()
+
+    logger.info("reason_deeply start cid=%s model=%s", correlation_id, model)
+
     for attempt in range(attempts):
         try:
             result = await asyncio.wait_for(
@@ -180,6 +189,11 @@ async def _reason_deeply(task: str) -> str:
             output = str(result.final_output)
             if len(output) > MAX_DELEGATION_OUTPUT:
                 output = output[:MAX_DELEGATION_OUTPUT] + "..."
+            duration = time.monotonic() - t_start
+            logger.info(
+                "reason_deeply success cid=%s model=%s duration=%.2fs",
+                correlation_id, model, duration,
+            )
             return condense_for_voice(output)
         except TimeoutError:
             last_err = TimeoutError(
@@ -194,7 +208,11 @@ async def _reason_deeply(task: str) -> str:
         if attempt < attempts - 1:
             await asyncio.sleep(1.0 * (2 ** attempt))
 
-    logger.error("reason_deeply exhausted %d attempts: %s", attempts, last_err)
+    duration = time.monotonic() - t_start
+    logger.error(
+        "reason_deeply failure cid=%s model=%s duration=%.2fs error=%s",
+        correlation_id, model, duration, last_err,
+    )
     return DELEGATION_FALLBACK
 
 

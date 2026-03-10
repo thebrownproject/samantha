@@ -383,3 +383,43 @@ async def test_reason_deeply_condenses_markdown():
     assert "- " not in result
     assert "**" not in result
     assert "Conclusion" in result
+
+
+# -- delegation telemetry --
+
+async def test_reason_deeply_logs_success_telemetry(caplog):
+    """Successful delegation emits start and success log messages with correlation ID, model, and duration."""
+    import logging
+
+    mock_result = AsyncMock()
+    mock_result.final_output = "telemetry answer"
+    with (
+        caplog.at_level(logging.INFO, logger="samantha.tools"),
+        patch("samantha.tools.Runner.run", new_callable=AsyncMock, return_value=mock_result),
+    ):
+        result = await _reason_deeply("telemetry test")
+    assert result == "telemetry answer"
+    log_text = caplog.text
+    assert "reason_deeply start" in log_text
+    assert "reason_deeply success" in log_text
+    assert "cid=" in log_text
+    assert "model=" in log_text
+    assert "duration=" in log_text
+
+
+async def test_reason_deeply_logs_failure_telemetry(caplog):
+    """Failed delegation emits failure log with correlation ID and duration."""
+    import logging
+
+    configure_tools(Config(safe_mode=False, delegation_timeout=5, delegation_max_retries=0))
+    with (
+        caplog.at_level(logging.INFO, logger="samantha.tools"),
+        patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=RuntimeError("boom")),
+    ):
+        result = await _reason_deeply("fail task")
+    assert result == DELEGATION_FALLBACK
+    log_text = caplog.text
+    assert "reason_deeply start" in log_text
+    assert "reason_deeply failure" in log_text
+    assert "cid=" in log_text
+    assert "duration=" in log_text
