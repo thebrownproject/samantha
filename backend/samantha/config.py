@@ -8,6 +8,7 @@ from pathlib import Path
 
 VALID_VOICES = {"alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"}
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+VALID_TURN_DETECTION_TYPES = {"semantic_vad", "server_vad"}
 
 
 @dataclass
@@ -26,6 +27,8 @@ class Config:
     data_dir: Path = field(default_factory=lambda: Path.home() / ".samantha")
     bash_allowlist: list[str] = field(default_factory=list)
     log_level: str = "INFO"
+    mcp_enabled: bool = True
+    mcp_server_command: str = ""
 
     def __post_init__(self):
         if isinstance(self.data_dir, str):
@@ -39,6 +42,11 @@ class Config:
             raise ValueError(f"voice must be one of {sorted(VALID_VOICES)}, got {self.voice!r}")
         if self.log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"log_level must be one of {sorted(VALID_LOG_LEVELS)}, got {self.log_level!r}")
+        if self.turn_detection_type not in VALID_TURN_DETECTION_TYPES:
+            raise ValueError(
+                f"turn_detection_type must be one of {sorted(VALID_TURN_DETECTION_TYPES)}, "
+                f"got {self.turn_detection_type!r}"
+            )
         if not isinstance(self.bash_allowlist, list):
             raise ValueError("bash_allowlist must be a list")
 
@@ -61,7 +69,8 @@ def load_config(path: Path | None = None) -> Config:
     config_path = path or (Path.home() / ".samantha" / "config.json")
     if config_path.exists():
         raw = json.loads(config_path.read_text())
-        return Config(**raw)
+        known = {f.name for f in fields(Config)}
+        return Config(**{k: v for k, v in raw.items() if k in known})
     return Config()
 
 

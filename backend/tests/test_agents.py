@@ -35,6 +35,16 @@ def test_build_runner_config_defaults(cfg):
     assert ms["audio"]["output"]["format"] == "pcm16"
     assert ms["audio"]["output"]["voice"] == "ash"
     assert rc["async_tool_calls"] is True
+    assert ms["tool_choice"] == "auto"
+
+
+def test_build_runner_config_uses_audio_format_constant(cfg):
+    from samantha.agents import AUDIO_FORMAT, build_runner_config
+
+    rc = build_runner_config(cfg)
+    ms = rc["model_settings"]
+    assert ms["audio"]["input"]["format"] == AUDIO_FORMAT
+    assert ms["audio"]["output"]["format"] == AUDIO_FORMAT
 
 
 def test_build_runner_config_custom(custom_cfg):

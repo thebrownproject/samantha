@@ -1,6 +1,7 @@
 """Tests for config module -- schema, defaults, validation, persistence."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -48,6 +49,11 @@ def test_invalid_port():
         Config(ws_port=70000)
 
 
+def test_invalid_turn_detection_type():
+    with pytest.raises(ValueError, match="turn_detection_type"):
+        Config(turn_detection_type="invalid_vad")
+
+
 def test_invalid_voice():
     with pytest.raises(ValueError, match="voice"):
         Config(voice="nonexistent")
@@ -75,7 +81,7 @@ def test_round_trip(tmp_path):
 
 def test_data_dir_from_string():
     cfg = Config(data_dir="/tmp/test_samantha")
-    assert isinstance(cfg.data_dir, type(cfg.data_dir))
+    assert isinstance(cfg.data_dir, Path)
     assert str(cfg.data_dir) == "/tmp/test_samantha"
 
 
