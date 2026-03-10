@@ -12,6 +12,7 @@ from samantha.events import (
     msg_tool_end,
     msg_tool_start,
     msg_transcript,
+    normalize_transcript,
 )
 
 
@@ -241,3 +242,72 @@ def test_full_conversation_flow(dispatcher):
         AppState.IDLE,
     ]
     # audio_end -> idle, agent_end suppressed (already idle)
+
+
+# -- normalize_transcript --
+
+def test_normalize_strips_whitespace():
+    result = normalize_transcript("  hello world  ", "user", final=True)
+    assert result == {"type": "transcript", "role": "user", "text": "hello world", "final": True}
+
+
+def test_normalize_partial_transcript():
+    result = normalize_transcript("partial", "assistant", final=False)
+    assert result["final"] is False
+    assert result["text"] == "partial"
+
+
+def test_normalize_final_transcript():
+    result = normalize_transcript("done", "user", final=True)
+    assert result["final"] is True
+
+
+def test_normalize_empty_returns_none():
+    assert normalize_transcript("", "user") is None
+
+
+def test_normalize_whitespace_only_returns_none():
+    assert normalize_transcript("   \n\t  ", "assistant") is None
+
+
+def test_normalize_none_text_returns_none():
+    assert normalize_transcript(None, "user") is None
+
+
+def test_normalize_unknown_role_defaults_to_assistant():
+    result = normalize_transcript("text", "system")
+    assert result["role"] == "assistant"
+
+
+def test_normalize_user_role():
+    result = normalize_transcript("hi", "user")
+    assert result["role"] == "user"
+
+
+def test_normalize_assistant_role():
+    result = normalize_transcript("hi", "assistant")
+    assert result["role"] == "assistant"
+
+
+# -- EventDispatcher.emit_transcript --
+
+def test_emit_transcript_fires_callbacks(dispatcher):
+    received = []
+    dispatcher.on_transcript(received.append)
+    dispatcher.emit_transcript("hello", "user", final=True)
+    assert len(received) == 1
+    assert received[0] == {"type": "transcript", "role": "user", "text": "hello", "final": True}
+
+
+def test_emit_transcript_suppresses_empty(dispatcher):
+    received = []
+    dispatcher.on_transcript(received.append)
+    dispatcher.emit_transcript("  ", "user")
+    assert received == []
+
+
+def test_emit_transcript_normalizes_role(dispatcher):
+    received = []
+    dispatcher.on_transcript(received.append)
+    dispatcher.emit_transcript("text", "unknown_role")
+    assert received[0]["role"] == "assistant"

@@ -1,9 +1,10 @@
-"""Tool definitions: bash, file_read, file_write, reason_deeply, web_search."""
+"""Tool definitions: bash, file_read, file_write, reason_deeply, web_search, memory."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shlex
 from pathlib import Path
 
@@ -11,11 +12,37 @@ import openai
 from agents import Agent, Runner, function_tool
 
 from samantha.config import Config
+from samantha.memory import MemoryStore
 from samantha.prompts import DELEGATION_PROMPT
 
 logger = logging.getLogger(__name__)
 
 _cfg: Config = Config()
+_memory: MemoryStore | None = None
+
+
+def format_tool_error(tool_name: str, error: str) -> str:
+    """Consistent, voice-friendly error message for any tool failure."""
+    short = error.split("\n")[0].strip()[:200]
+    logger.error("Tool %s failed: %s", tool_name, error)
+    return f"Error in {tool_name}: {short}"
+
+
+def condense_for_voice(text: str, max_chars: int = 500) -> str:
+    """Strip markdown/code artifacts and truncate for spoken delivery."""
+    out = re.sub(r"```[\s\S]*?```", "", text)
+    out = re.sub(r"`([^`]+)`", r"\1", out)
+    out = re.sub(r"^#{1,6}\s+", "", out, flags=re.MULTILINE)
+    out = re.sub(r"^[\s]*[-*]\s+", "", out, flags=re.MULTILINE)
+    out = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", out)
+    out = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", out)
+    out = re.sub(r"\n{2,}", " ", out)
+    out = out.strip()
+    if len(out) <= max_chars:
+        return out
+    cut = out[:max_chars].rsplit(". ", 1)
+    return (cut[0] + ".") if len(cut) > 1 else out[:max_chars] + "..."
+
 
 DANGEROUS_PATTERNS = ["rm -rf /", "rm -rf /*", "mkfs.", "dd if=", ":(){", "fork bomb"]
 PROTECTED_PREFIXES = ["/etc", "/usr", "/bin", "/sbin", "/System", "/Library", "/boot", "/proc"]
@@ -24,8 +51,7 @@ MAX_READ = 1_048_576
 
 
 def _is_dangerous(command: str) -> bool:
-    cmd = command.strip()
-    return any(p in cmd for p in DANGEROUS_PATTERNS)
+    return any(p in command.strip() for p in DANGEROUS_PATTERNS)
 
 
 def _check_path(path: Path, *, write: bool = False) -> str | None:
@@ -47,18 +73,18 @@ def _check_path(path: Path, *, write: bool = False) -> str | None:
 
 async def _safe_bash(command: str) -> str:
     if _is_dangerous(command):
-        return "Blocked: dangerous command pattern detected"
+        return format_tool_error("bash", "dangerous command pattern detected")
 
     if _cfg.safe_mode:
         try:
             base_cmd = shlex.split(command)[0]
         except ValueError:
-            return "Error: malformed command"
+            return format_tool_error("bash", "malformed command")
         base_cmd = Path(base_cmd).name
         if not _cfg.bash_allowlist:
-            return "Blocked: no commands allowed (bash_allowlist is empty in safe mode)"
+            return format_tool_error("bash", "bash_allowlist is empty in safe mode")
         if base_cmd not in _cfg.bash_allowlist:
-            return f"Blocked: '{base_cmd}' not in bash allowlist"
+            return format_tool_error("bash", f"'{base_cmd}' not in bash allowlist")
 
     try:
         proc = await asyncio.create_subprocess_shell(
@@ -67,9 +93,9 @@ async def _safe_bash(command: str) -> str:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
     except asyncio.TimeoutError:
         proc.kill()
-        return "Error: command timed out after 30s"
+        return format_tool_error("bash", "command timed out after 30s")
     except OSError as e:
-        return f"Error: {e}"
+        return format_tool_error("bash", str(e))
 
     output = (stdout + stderr).decode(errors="replace")
     if len(output) > MAX_OUTPUT:
@@ -80,30 +106,30 @@ async def _safe_bash(command: str) -> str:
 async def _file_read(path: str) -> str:
     resolved = Path(path).resolve()
     if err := _check_path(resolved):
-        return err
+        return format_tool_error("file_read", err)
     if not resolved.exists():
-        return f"Error: file not found: {resolved}"
+        return format_tool_error("file_read", f"file not found: {resolved}")
     if resolved.is_dir():
-        return f"Error: path is a directory: {resolved}"
+        return format_tool_error("file_read", f"path is a directory: {resolved}")
     if resolved.stat().st_size > MAX_READ:
-        return f"Error: file too large ({resolved.stat().st_size} bytes, limit {MAX_READ})"
+        return format_tool_error("file_read", f"file too large ({resolved.stat().st_size} bytes)")
     try:
         return resolved.read_text(errors="replace")
     except PermissionError:
-        return f"Error: permission denied: {resolved}"
+        return format_tool_error("file_read", f"permission denied: {resolved}")
 
 
 async def _file_write(path: str, content: str) -> str:
     resolved = Path(path).resolve()
     if err := _check_path(resolved, write=True):
-        return err
+        return format_tool_error("file_write", err)
     try:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content)
     except PermissionError:
-        return f"Error: permission denied: {resolved}"
+        return format_tool_error("file_write", f"permission denied: {resolved}")
     except OSError as e:
-        return f"Error: {e}"
+        return format_tool_error("file_write", str(e))
     return f"Wrote {len(content)} bytes to {resolved}"
 
 
@@ -154,7 +180,7 @@ async def _reason_deeply(task: str) -> str:
             output = str(result.final_output)
             if len(output) > MAX_DELEGATION_OUTPUT:
                 output = output[:MAX_DELEGATION_OUTPUT] + "..."
-            return output
+            return condense_for_voice(output)
         except asyncio.TimeoutError:
             last_err = asyncio.TimeoutError(
                 f"delegation timed out after {_cfg.delegation_timeout}s"
@@ -188,8 +214,7 @@ async def _web_search(query: str) -> str:
             input=query,
         )
     except Exception as exc:
-        logger.exception("web_search failed")
-        return f"Error: web search failed: {exc}"
+        return format_tool_error("web_search", str(exc))
 
     lines: list[str] = []
     for item in response.output:
@@ -213,14 +238,51 @@ async def web_search(query: str) -> str:
     return await _web_search(query)
 
 
+@function_tool
+async def memory_save(content: str, tags: str = "") -> str:
+    """Save a fact or observation to long-term memory. Use tags (comma-separated) for categorization."""
+    if _memory is None:
+        return format_tool_error("memory_save", "memory store not initialized")
+    try:
+        tag_str = tags if tags else None
+        mem_id = await _memory.save(content, tags=tag_str)
+        return f"Saved memory #{mem_id}"
+    except Exception as exc:
+        return format_tool_error("memory_save", str(exc))
+
+
+@function_tool
+async def memory_search(query: str) -> str:
+    """Search long-term memory for relevant facts and context."""
+    if _memory is None:
+        return format_tool_error("memory_search", "memory store not initialized")
+    try:
+        results = await _memory.search(query)
+        if not results:
+            return "No memories found."
+        lines = []
+        for r in results:
+            tags_part = f" [{r['tags']}]" if r.get("tags") else ""
+            lines.append(f"- {r['content']}{tags_part} (score: {r['score']})")
+        return "\n".join(lines)
+    except Exception as exc:
+        return format_tool_error("memory_search", str(exc))
+
+
 def configure_tools(config: Config) -> None:
     """Set module-level config used by tools at runtime."""
     global _cfg
     _cfg = config
 
 
+def configure_memory(store: MemoryStore) -> None:
+    """Set module-level memory store used by memory tools."""
+    global _memory
+    _memory = store
+
+
 def register_tools(config: Config | None = None) -> list:
     """Register and return all available tools."""
     if config:
         configure_tools(config)
-    return [safe_bash, file_read, file_write, reason_deeply, web_search]
+    return [safe_bash, file_read, file_write, reason_deeply, web_search, memory_save, memory_search]

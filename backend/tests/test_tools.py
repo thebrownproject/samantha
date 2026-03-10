@@ -16,7 +16,9 @@ from samantha.tools import (
     _reason_deeply,
     _safe_bash,
     _web_search,
+    condense_for_voice,
     configure_tools,
+    format_tool_error,
     register_tools,
     safe_bash,
     file_write,
@@ -45,12 +47,12 @@ async def test_bash_ls(tmp_path):
 
 async def test_bash_rejects_dangerous():
     result = await _safe_bash("rm -rf /")
-    assert "Blocked" in result
+    assert "Error in" in result
 
 
 async def test_bash_rejects_dangerous_mkfs():
     result = await _safe_bash("mkfs.ext4 /dev/sda")
-    assert "Blocked" in result
+    assert "Error in" in result
 
 
 async def test_bash_timeout():
@@ -61,7 +63,7 @@ async def test_bash_timeout():
 async def test_bash_allowlist_blocks():
     configure_tools(Config(safe_mode=True, bash_allowlist=["ls", "echo"]))
     result = await _safe_bash("curl http://example.com")
-    assert "Blocked" in result
+    assert "Error in" in result
     assert "allowlist" in result
 
 
@@ -74,7 +76,7 @@ async def test_bash_allowlist_allows():
 async def test_bash_empty_allowlist():
     configure_tools(Config(safe_mode=True, bash_allowlist=[]))
     result = await _safe_bash("echo test")
-    assert "Blocked" in result
+    assert "Error in" in result
     assert "empty" in result
 
 
@@ -95,7 +97,7 @@ async def test_read_not_found(tmp_path):
 async def test_read_rejects_outside_home_in_safe_mode():
     configure_tools(Config(safe_mode=True))
     result = await _file_read("/etc/passwd")
-    assert "Blocked" in result
+    assert "Error in" in result
 
 
 async def test_read_rejects_oversized(tmp_path):
@@ -128,39 +130,39 @@ async def test_write_creates_parent_dirs(tmp_path):
 
 async def test_write_rejects_protected_etc():
     result = await _file_write("/etc/evil.conf", "x")
-    assert "Blocked" in result
+    assert "Error in" in result
     assert "protected" in result
 
 
 async def test_write_rejects_protected_usr():
     result = await _file_write("/usr/local/bad", "x")
-    assert "Blocked" in result
+    assert "Error in" in result
 
 
 async def test_write_rejects_ssh_dir():
     ssh_path = Path.home() / ".ssh" / "test_key"
     result = await _file_write(str(ssh_path), "x")
-    assert "Blocked" in result
+    assert "Error in" in result
     assert "sensitive" in result
 
 
 async def test_write_safe_mode_blocks_outside_home():
     configure_tools(Config(safe_mode=True))
     result = await _file_write("/tmp/outside.txt", "x")
-    assert "Blocked" in result
+    assert "Error in" in result
 
 
 # -- register_tools --
 
 def test_register_tools_returns_all():
     tools = register_tools()
-    assert len(tools) == 5
+    assert len(tools) == 7
 
 
 def test_register_tools_with_config():
     cfg = Config(safe_mode=False)
     tools = register_tools(cfg)
-    assert len(tools) == 5
+    assert len(tools) == 7
 
 
 def test_register_tools_includes_reason_deeply():
@@ -190,7 +192,8 @@ async def test_reason_deeply_truncates_long_output():
     mock_result.final_output = "x" * 3000
     with patch("samantha.tools.Runner.run", new_callable=AsyncMock, return_value=mock_result):
         result = await _reason_deeply("Generate a long response")
-    assert len(result) == 2048 + 3  # truncated + "..."
+    # Truncated to MAX_DELEGATION_OUTPUT then condensed for voice (500 char default)
+    assert len(result) <= 500 + 3
     assert result.endswith("...")
 
 
@@ -294,5 +297,87 @@ async def test_web_search_handles_api_error():
         mock_cls.return_value = mock_client
         result = await _web_search("fail query")
 
-    assert "Error:" in result
-    assert "web search failed" in result
+    assert "Error in web_search" in result
+
+
+# -- format_tool_error --
+
+def test_format_tool_error_includes_tool_name():
+    result = format_tool_error("bash", "command not found")
+    assert result == "Error in bash: command not found"
+
+
+def test_format_tool_error_truncates_multiline():
+    result = format_tool_error("file_read", "line one\nline two\nline three")
+    assert "line one" in result
+    assert "\n" not in result
+
+
+def test_format_tool_error_truncates_long_message():
+    result = format_tool_error("bash", "x" * 300)
+    assert len(result) < 250
+
+
+# -- condense_for_voice --
+
+def test_condense_strips_markdown_headers():
+    assert "Summary" in condense_for_voice("## Summary\nSome content")
+    assert "#" not in condense_for_voice("## Summary\nSome content")
+
+
+def test_condense_strips_code_blocks():
+    text = "Before\n```python\nprint('hi')\n```\nAfter"
+    result = condense_for_voice(text)
+    assert "```" not in result
+    assert "After" in result
+
+
+def test_condense_strips_inline_code():
+    assert condense_for_voice("Use `foo` here") == "Use foo here"
+
+
+def test_condense_strips_bullet_points():
+    text = "- First item\n- Second item"
+    result = condense_for_voice(text)
+    assert "- " not in result
+    assert "First item" in result
+
+
+def test_condense_strips_bold():
+    assert condense_for_voice("This is **important**") == "This is important"
+
+
+def test_condense_strips_links():
+    assert condense_for_voice("See [docs](http://example.com)") == "See docs"
+
+
+def test_condense_truncates_long_text():
+    text = "This is a sentence. " * 100
+    result = condense_for_voice(text, max_chars=100)
+    assert len(result) <= 104  # up to max_chars + "..."
+
+
+def test_condense_preserves_short_text():
+    assert condense_for_voice("Short and sweet.") == "Short and sweet."
+
+
+def test_condense_empty_returns_empty():
+    assert condense_for_voice("") == ""
+
+
+def test_condense_truncates_at_sentence_boundary():
+    text = "First sentence. Second sentence. Third sentence is much longer and goes on."
+    result = condense_for_voice(text, max_chars=40)
+    assert result.endswith(".")
+
+
+async def test_reason_deeply_condenses_markdown():
+    """reason_deeply strips markdown for voice output."""
+    mock_result = AsyncMock()
+    mock_result.final_output = "## Analysis\n- Point one\n- Point two\n**Conclusion**: yes"
+    with patch("samantha.tools.Runner.run", new_callable=AsyncMock, return_value=mock_result):
+        result = await _reason_deeply("Analyze this")
+    assert "#" not in result
+    assert "- " not in result
+    assert "**" not in result
+    assert "Conclusion" in result
