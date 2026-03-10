@@ -1,18 +1,25 @@
-"""Tests for tools module -- bash, file_read, file_write, reason_deeply."""
+"""Tests for tools module -- bash, file_read, file_write, reason_deeply, web_search."""
 
+import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from samantha.config import Config
 from samantha.tools import (
+    DELEGATION_FALLBACK,
     _file_read,
     _file_write,
+    _needs_approval_check,
     _reason_deeply,
     _safe_bash,
+    _web_search,
     configure_tools,
     register_tools,
+    safe_bash,
+    file_write,
 )
 
 
@@ -147,19 +154,25 @@ async def test_write_safe_mode_blocks_outside_home():
 
 def test_register_tools_returns_all():
     tools = register_tools()
-    assert len(tools) == 4
+    assert len(tools) == 5
 
 
 def test_register_tools_with_config():
     cfg = Config(safe_mode=False)
     tools = register_tools(cfg)
-    assert len(tools) == 4
+    assert len(tools) == 5
 
 
 def test_register_tools_includes_reason_deeply():
     tools = register_tools()
     names = [t.name for t in tools]
     assert "reason_deeply" in names
+
+
+def test_register_tools_includes_web_search():
+    tools = register_tools()
+    names = [t.name for t in tools]
+    assert "web_search" in names
 
 
 # -- reason_deeply --
@@ -184,4 +197,102 @@ async def test_reason_deeply_truncates_long_output():
 async def test_reason_deeply_handles_error():
     with patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=RuntimeError("API down")):
         result = await _reason_deeply("This will fail")
-    assert "wasn't able to complete" in result
+    assert result == DELEGATION_FALLBACK
+
+
+async def test_reason_deeply_timeout():
+    """Runner.run hangs past delegation_timeout -- returns fallback after retries."""
+    configure_tools(Config(safe_mode=False, delegation_timeout=1, delegation_max_retries=0))
+
+    async def slow_run(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    with patch("samantha.tools.Runner.run", side_effect=slow_run):
+        result = await _reason_deeply("slow task")
+    assert result == DELEGATION_FALLBACK
+
+
+async def test_reason_deeply_retry_then_succeed():
+    """First attempt fails, second succeeds."""
+    configure_tools(Config(safe_mode=False, delegation_timeout=5, delegation_max_retries=1))
+
+    mock_result = AsyncMock()
+    mock_result.final_output = "recovered answer"
+    with patch("samantha.tools.Runner.run", new_callable=AsyncMock,
+               side_effect=[RuntimeError("transient"), mock_result]):
+        with patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await _reason_deeply("retry task")
+    assert result == "recovered answer"
+
+
+async def test_reason_deeply_all_retries_exhausted():
+    """All attempts fail -- returns fallback."""
+    configure_tools(Config(safe_mode=False, delegation_timeout=5, delegation_max_retries=2))
+
+    with patch("samantha.tools.Runner.run", new_callable=AsyncMock,
+               side_effect=RuntimeError("persistent failure")):
+        with patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await _reason_deeply("doomed task")
+    assert result == DELEGATION_FALLBACK
+
+
+# -- needs_approval / confirm_destructive --
+
+async def test_needs_approval_true_when_confirm_destructive():
+    configure_tools(Config(safe_mode=False, confirm_destructive=True))
+    assert await _needs_approval_check(None, None, None) is True
+
+
+async def test_needs_approval_false_when_not_confirm_destructive():
+    configure_tools(Config(safe_mode=False, confirm_destructive=False))
+    assert await _needs_approval_check(None, None, None) is False
+
+
+def test_safe_bash_has_needs_approval():
+    assert safe_bash.needs_approval is _needs_approval_check
+
+
+def test_file_write_has_needs_approval():
+    assert file_write.needs_approval is _needs_approval_check
+
+
+# -- web_search --
+
+async def test_web_search_returns_results():
+    annotation = SimpleNamespace(type="url_citation", url="https://example.com", title="Example")
+    text_block = SimpleNamespace(type="output_text", text="Here are results.", annotations=[annotation])
+    message_item = SimpleNamespace(type="message", content=[text_block])
+    mock_response = SimpleNamespace(output=[message_item])
+
+    with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
+        mock_client = MagicMock()
+        mock_client.responses.create = AsyncMock(return_value=mock_response)
+        mock_cls.return_value = mock_client
+        result = await _web_search("test query")
+
+    assert "Here are results." in result
+    assert "Example" in result
+    assert "https://example.com" in result
+
+
+async def test_web_search_handles_empty_results():
+    mock_response = SimpleNamespace(output=[])
+
+    with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
+        mock_client = MagicMock()
+        mock_client.responses.create = AsyncMock(return_value=mock_response)
+        mock_cls.return_value = mock_client
+        result = await _web_search("obscure query xyz")
+
+    assert "No results found" in result
+
+
+async def test_web_search_handles_api_error():
+    with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
+        mock_client = MagicMock()
+        mock_client.responses.create = AsyncMock(side_effect=RuntimeError("API error"))
+        mock_cls.return_value = mock_client
+        result = await _web_search("fail query")
+
+    assert "Error:" in result
+    assert "web search failed" in result

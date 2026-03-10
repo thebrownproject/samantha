@@ -27,6 +27,8 @@ class Config:
     data_dir: Path = field(default_factory=lambda: Path.home() / ".samantha")
     bash_allowlist: list[str] = field(default_factory=list)
     log_level: str = "INFO"
+    delegation_timeout: int = 30
+    delegation_max_retries: int = 1
     mcp_enabled: bool = True
     mcp_server_command: str = ""
 
@@ -49,6 +51,10 @@ class Config:
             )
         if not isinstance(self.bash_allowlist, list):
             raise ValueError("bash_allowlist must be a list")
+        if self.delegation_timeout <= 0:
+            raise ValueError(f"delegation_timeout must be positive, got {self.delegation_timeout}")
+        if self.delegation_max_retries < 0:
+            raise ValueError(f"delegation_max_retries must be >= 0, got {self.delegation_max_retries}")
 
     @property
     def config_path(self) -> Path:

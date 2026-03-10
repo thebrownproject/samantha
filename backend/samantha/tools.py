@@ -1,4 +1,4 @@
-"""Tool definitions: bash, file_read, file_write, reason_deeply."""
+"""Tool definitions: bash, file_read, file_write, reason_deeply, web_search."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import logging
 import shlex
 from pathlib import Path
 
+import openai
 from agents import Agent, Runner, function_tool
 
 from samantha.config import Config
@@ -106,7 +107,12 @@ async def _file_write(path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {resolved}"
 
 
-@function_tool
+async def _needs_approval_check(_ctx, _args, _call_id) -> bool:
+    """Approval gate -- returns True when config.confirm_destructive is enabled."""
+    return _cfg.confirm_destructive
+
+
+@function_tool(needs_approval=_needs_approval_check)
 async def safe_bash(command: str) -> str:
     """Execute a shell command with safety controls and timeout."""
     return await _safe_bash(command)
@@ -118,13 +124,17 @@ async def file_read(path: str) -> str:
     return await _file_read(path)
 
 
-@function_tool
+@function_tool(needs_approval=_needs_approval_check)
 async def file_write(path: str, content: str) -> str:
     """Write content to a file, creating parent directories as needed."""
     return await _file_write(path, content)
 
 
 MAX_DELEGATION_OUTPUT = 2048
+DELEGATION_FALLBACK = (
+    "I wasn't able to think that through deeply right now. "
+    "Let me try to help directly."
+)
 
 
 async def _reason_deeply(task: str) -> str:
@@ -133,21 +143,74 @@ async def _reason_deeply(task: str) -> str:
         model=_cfg.reasoning_model,
         instructions=DELEGATION_PROMPT,
     )
-    try:
-        result = await Runner.run(agent, input=task, max_turns=1)
-        output = str(result.final_output)
-    except Exception:
-        logger.exception("reason_deeply failed")
-        return "I wasn't able to complete that analysis. Could you try rephrasing?"
-    if len(output) > MAX_DELEGATION_OUTPUT:
-        output = output[:MAX_DELEGATION_OUTPUT] + "..."
-    return output
+    last_err: Exception | None = None
+    attempts = 1 + _cfg.delegation_max_retries
+    for attempt in range(attempts):
+        try:
+            result = await asyncio.wait_for(
+                Runner.run(agent, input=task, max_turns=1),
+                timeout=_cfg.delegation_timeout,
+            )
+            output = str(result.final_output)
+            if len(output) > MAX_DELEGATION_OUTPUT:
+                output = output[:MAX_DELEGATION_OUTPUT] + "..."
+            return output
+        except asyncio.TimeoutError:
+            last_err = asyncio.TimeoutError(
+                f"delegation timed out after {_cfg.delegation_timeout}s"
+            )
+            logger.warning("reason_deeply timeout (attempt %d/%d)", attempt + 1, attempts)
+        except Exception as exc:
+            last_err = exc
+            logger.warning(
+                "reason_deeply error (attempt %d/%d): %s", attempt + 1, attempts, exc,
+            )
+        if attempt < attempts - 1:
+            await asyncio.sleep(1.0 * (2 ** attempt))
+
+    logger.error("reason_deeply exhausted %d attempts: %s", attempts, last_err)
+    return DELEGATION_FALLBACK
 
 
 @function_tool
 async def reason_deeply(task: str) -> str:
     """Delegate complex reasoning to a specialist. Use for multi-step analysis, math, code review, planning, or comparisons that need deeper thought. Returns a concise answer for voice delivery."""
     return await _reason_deeply(task)
+
+
+async def _web_search(query: str) -> str:
+    """Search the web via OpenAI Responses API and return structured results."""
+    client = openai.AsyncOpenAI()
+    try:
+        response = await client.responses.create(
+            model="gpt-4o-mini",
+            tools=[{"type": "web_search"}],
+            input=query,
+        )
+    except Exception as exc:
+        logger.exception("web_search failed")
+        return f"Error: web search failed: {exc}"
+
+    lines: list[str] = []
+    for item in response.output:
+        if item.type == "message":
+            for block in item.content:
+                if hasattr(block, "text"):
+                    lines.append(block.text)
+                if hasattr(block, "annotations"):
+                    for ann in block.annotations:
+                        if hasattr(ann, "url") and hasattr(ann, "title"):
+                            lines.append(f"  [{ann.title}]({ann.url})")
+
+    if not lines:
+        return f"No results found for: {query}"
+    return "\n".join(lines)
+
+
+@function_tool
+async def web_search(query: str) -> str:
+    """Search the web and return relevant results with titles, snippets, and URLs."""
+    return await _web_search(query)
 
 
 def configure_tools(config: Config) -> None:
@@ -160,4 +223,4 @@ def register_tools(config: Config | None = None) -> list:
     """Register and return all available tools."""
     if config:
         configure_tools(config)
-    return [safe_bash, file_read, file_write, reason_deeply]
+    return [safe_bash, file_read, file_write, reason_deeply, web_search]
