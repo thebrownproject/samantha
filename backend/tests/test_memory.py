@@ -1,6 +1,8 @@
-"""Tests for SQLite schema and migration framework."""
+"""Tests for SQLite schema, migration framework, save, and search."""
 
 import sqlite3
+
+import pytest
 
 from samantha.memory import MIGRATIONS, MemoryStore
 
@@ -206,4 +208,152 @@ async def test_v1_to_v2_migration(tmp_path):
     }
     assert "memories_fts" in tables
     assert "memory_embeddings" in tables
+    await store.close()
+
+
+# --- save() tests ---
+
+
+async def test_save_inserts_into_memories(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    mem_id = await store.save("The user likes jazz music", tags="preference")
+    row = store.conn.execute("SELECT content, tags FROM memories WHERE id = ?", (mem_id,)).fetchone()
+    assert row[0] == "The user likes jazz music"
+    assert row[1] == "preference"
+    await store.close()
+
+
+async def test_save_generates_embedding(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    mem_id = await store.save("Embedding test content")
+    row = store.conn.execute(
+        "SELECT memory_id FROM memory_embeddings WHERE memory_id = ?", (mem_id,),
+    ).fetchone()
+    assert row is not None
+    assert row[0] == mem_id
+    await store.close()
+
+
+async def test_save_returns_valid_id(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    id1 = await store.save("First memory")
+    id2 = await store.save("Second memory")
+    assert isinstance(id1, int)
+    assert id1 > 0
+    assert id2 > id1
+    await store.close()
+
+
+async def test_save_deduplication(tmp_path):
+    """Near-identical content should update existing row, not insert."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    id1 = await store.save("The user's favorite color is blue", tags="preference")
+    # Save nearly identical content
+    id2 = await store.save("The user's favorite color is blue", tags="preference,updated")
+    assert id1 == id2
+    row = store.conn.execute("SELECT tags FROM memories WHERE id = ?", (id1,)).fetchone()
+    assert row[0] == "preference,updated"
+    count = store.conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+    assert count == 1
+    await store.close()
+
+
+async def test_save_distinct_content_creates_new(tmp_path):
+    """Sufficiently different content should create a new entry."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    id1 = await store.save("The user likes jazz music")
+    id2 = await store.save("The weather in Tokyo is rainy today")
+    assert id1 != id2
+    count = store.conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+    assert count == 2
+    await store.close()
+
+
+async def test_save_with_source(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    mem_id = await store.save("fact", source="conversation")
+    row = store.conn.execute("SELECT source FROM memories WHERE id = ?", (mem_id,)).fetchone()
+    assert row[0] == "conversation"
+    await store.close()
+
+
+# --- search() tests ---
+
+
+async def test_search_finds_by_text(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    await store.save("The user's birthday is March 15th", tags="personal")
+    await store.save("Meeting with Alice scheduled for Friday", tags="calendar")
+    results = await store.search("birthday")
+    assert len(results) >= 1
+    assert any("birthday" in r["content"] for r in results)
+    await store.close()
+
+
+async def test_search_finds_by_semantic_similarity(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    await store.save("The user enjoys listening to jazz and blues")
+    await store.save("Python is a programming language")
+    results = await store.search("music preferences")
+    assert len(results) >= 1
+    # Jazz/blues memory should rank higher than Python memory
+    assert "jazz" in results[0]["content"].lower()
+    await store.close()
+
+
+async def test_search_returns_structured_results(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    await store.save("Structured result test", tags="test", source="unit_test")
+    results = await store.search("structured result")
+    assert len(results) == 1
+    r = results[0]
+    assert set(r.keys()) == {"id", "content", "tags", "source", "score", "created_at"}
+    assert isinstance(r["id"], int)
+    assert isinstance(r["score"], float)
+    assert r["tags"] == "test"
+    assert r["source"] == "unit_test"
+    await store.close()
+
+
+async def test_search_no_matches_returns_empty(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    results = await store.search("quantum entanglement")
+    assert results == []
+    await store.close()
+
+
+async def test_search_respects_limit(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    for i in range(5):
+        await store.save(f"Memory number {i} about cats and dogs")
+    results = await store.search("cats and dogs", limit=3)
+    assert len(results) <= 3
+    await store.close()
+
+
+async def test_search_hybrid_scoring(tmp_path):
+    """Both FTS and vector should contribute to the final score."""
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    # This content matches both textually and semantically
+    await store.save("The capital of France is Paris")
+    # This content is semantically related but uses different words
+    await store.save("French geography and major European cities")
+    results = await store.search("capital of France")
+    assert len(results) >= 1
+    # The exact text match should score highest
+    assert "capital" in results[0]["content"].lower()
+    # Top result should have a meaningful score from both FTS and vec contributions
+    assert results[0]["score"] > 0
     await store.close()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import struct
 from pathlib import Path
 
 import sqlite_vec
@@ -120,12 +121,154 @@ class MemoryStore:
         vec = await asyncio.to_thread(model.encode, text)
         return vec.tolist()
 
-    async def save(self, content: str, metadata: dict | None = None) -> int:
-        """Save a memory entry. Returns the entry ID."""
-        ...
-        return 0
+    async def save(
+        self, content: str, tags: str | None = None, source: str | None = None,
+    ) -> int:
+        """Save a memory entry with deduplication. Returns the entry ID."""
+        embedding = await self.encode(content)
+        raw_vec = _serialize_f32(embedding)
+
+        def _save_sync() -> int:
+            # Dedup: check for near-identical content (cosine sim > 0.95 ~ distance < 0.05)
+            dupes = self.conn.execute(
+                """SELECT memory_id, distance
+                   FROM memory_embeddings
+                   WHERE embedding MATCH ? AND k = 1""",
+                (raw_vec,),
+            ).fetchall()
+            if dupes and dupes[0][1] < 0.05:
+                existing_id = dupes[0][0]
+                self.conn.execute(
+                    """UPDATE memories
+                       SET content = ?, tags = ?, source = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (content, tags, source, existing_id),
+                )
+                # Update embedding
+                self.conn.execute(
+                    "DELETE FROM memory_embeddings WHERE memory_id = ?", (existing_id,),
+                )
+                self.conn.execute(
+                    "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
+                    (existing_id, raw_vec),
+                )
+                self.conn.commit()
+                return existing_id
+
+            cur = self.conn.execute(
+                "INSERT INTO memories (content, tags, source) VALUES (?, ?, ?)",
+                (content, tags, source),
+            )
+            memory_id = cur.lastrowid
+            self.conn.execute(
+                "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
+                (memory_id, raw_vec),
+            )
+            self.conn.commit()
+            return memory_id
+
+        return await asyncio.to_thread(_save_sync)
+
+    SEARCH_FTS_WEIGHT = 0.4
+    SEARCH_VEC_WEIGHT = 0.6
 
     async def search(self, query: str, limit: int = 10) -> list[dict]:
-        """Search memories by text and vector similarity."""
-        ...
-        return []
+        """Search memories by hybrid FTS5 + vector similarity. Returns ranked results."""
+        embedding = await self.encode(query)
+        raw_vec = _serialize_f32(embedding)
+        # Sanitize query for FTS5: strip special chars, quote each token
+        fts_query = _fts_sanitize(query)
+
+        def _search_sync() -> list[dict]:
+            # Vector search: get top candidates (fetch more than limit for merging)
+            fetch_n = min(limit * 3, 100)
+            vec_rows = self.conn.execute(
+                """SELECT memory_id, distance
+                   FROM memory_embeddings
+                   WHERE embedding MATCH ? AND k = ?""",
+                (raw_vec, fetch_n),
+            ).fetchall()
+
+            # FTS search
+            fts_rows = []
+            if fts_query:
+                fts_rows = self.conn.execute(
+                    """SELECT rowid, rank
+                       FROM memories_fts
+                       WHERE memories_fts MATCH ?
+                       ORDER BY rank
+                       LIMIT ?""",
+                    (fts_query, fetch_n),
+                ).fetchall()
+
+            # Build score maps. Lower distance = better for vec; rank is negative for FTS (more negative = better match)
+            vec_scores: dict[int, float] = {}
+            if vec_rows:
+                max_dist = max(r[1] for r in vec_rows) or 1.0
+                for mid, dist in vec_rows:
+                    vec_scores[mid] = 1.0 - (dist / max_dist) if max_dist > 0 else 1.0
+
+            fts_scores: dict[int, float] = {}
+            if fts_rows:
+                # FTS5 rank is negative; more negative = better
+                min_rank = min(r[1] for r in fts_rows)
+                max_rank = max(r[1] for r in fts_rows)
+                span = max_rank - min_rank if max_rank != min_rank else 1.0
+                for rid, rank in fts_rows:
+                    fts_scores[rid] = (max_rank - rank) / span
+
+            # Merge all candidate IDs
+            all_ids = set(vec_scores) | set(fts_scores)
+            if not all_ids:
+                return []
+
+            scored: list[tuple[int, float]] = []
+            for mid in all_ids:
+                vs = vec_scores.get(mid, 0.0)
+                fs = fts_scores.get(mid, 0.0)
+                combined = self.SEARCH_VEC_WEIGHT * vs + self.SEARCH_FTS_WEIGHT * fs
+                scored.append((mid, combined))
+
+            scored.sort(key=lambda x: x[1], reverse=True)
+            top_ids = [s[0] for s in scored[:limit]]
+            score_map = dict(scored)
+
+            if not top_ids:
+                return []
+
+            placeholders = ",".join("?" * len(top_ids))
+            rows = self.conn.execute(
+                f"""SELECT id, content, tags, source, created_at
+                    FROM memories WHERE id IN ({placeholders})""",
+                top_ids,
+            ).fetchall()
+
+            results = []
+            for row in rows:
+                results.append({
+                    "id": row[0],
+                    "content": row[1],
+                    "tags": row[2],
+                    "source": row[3],
+                    "score": round(score_map.get(row[0], 0.0), 4),
+                    "created_at": row[4],
+                })
+            results.sort(key=lambda x: x["score"], reverse=True)
+            return results
+
+        return await asyncio.to_thread(_search_sync)
+
+
+def _serialize_f32(vec: list[float]) -> bytes:
+    """Pack a float list into little-endian binary for sqlite-vec."""
+    return struct.pack(f"<{len(vec)}f", *vec)
+
+
+def _fts_sanitize(query: str) -> str:
+    """Convert a natural language query into a safe FTS5 query string."""
+    tokens = []
+    for word in query.split():
+        cleaned = "".join(c for c in word if c.isalnum())
+        if cleaned:
+            tokens.append(f'"{cleaned}"')
+    return " OR ".join(tokens)
