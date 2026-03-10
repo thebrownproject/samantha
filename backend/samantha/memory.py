@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import struct
+from datetime import date
 from pathlib import Path
 
 import sqlite_vec
@@ -257,6 +258,48 @@ class MemoryStore:
             return results
 
         return await asyncio.to_thread(_search_sync)
+
+    async def append_daily_log(self, entry: str, date_str: str | None = None) -> int:
+        """Append an entry to the daily log. Returns the log entry ID."""
+        if date_str is None:
+            date_str = date.today().isoformat()
+
+        def _append_sync() -> int:
+            cur = self.conn.execute(
+                "INSERT INTO daily_logs (date, entry) VALUES (?, ?)",
+                (date_str, entry),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+
+        return await asyncio.to_thread(_append_sync)
+
+    async def get_daily_log(self, date_str: str | None = None) -> list[dict]:
+        """Get all log entries for a given date (defaults to today)."""
+        if date_str is None:
+            date_str = date.today().isoformat()
+
+        def _get_sync() -> list[dict]:
+            rows = self.conn.execute(
+                "SELECT id, date, entry, created_at FROM daily_logs WHERE date = ? ORDER BY id",
+                (date_str,),
+            ).fetchall()
+            return [
+                {"id": r[0], "date": r[1], "entry": r[2], "created_at": r[3]}
+                for r in rows
+            ]
+
+        return await asyncio.to_thread(_get_sync)
+
+    async def promote_to_memory(self, daily_log_id: int, tags: str = "") -> int:
+        """Promote a daily log entry to permanent memory. Returns the new memory ID."""
+        row = self.conn.execute(
+            "SELECT entry FROM daily_logs WHERE id = ?", (daily_log_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Daily log entry {daily_log_id} not found")
+        tag_str = tags if tags else None
+        return await self.save(row[0], tags=tag_str, source="daily_log")
 
 
 def _serialize_f32(vec: list[float]) -> bytes:

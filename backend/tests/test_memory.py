@@ -1,6 +1,7 @@
-"""Tests for SQLite schema, migration framework, save, and search."""
+"""Tests for SQLite schema, migration framework, save, search, and daily logs."""
 
 import sqlite3
+from datetime import date
 
 import pytest
 
@@ -356,4 +357,91 @@ async def test_search_hybrid_scoring(tmp_path):
     assert "capital" in results[0]["content"].lower()
     # Top result should have a meaningful score from both FTS and vec contributions
     assert results[0]["score"] > 0
+    await store.close()
+
+
+# --- daily log tests ---
+
+
+async def test_append_daily_log(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    log_id = await store.append_daily_log("User asked about the weather", "2026-03-10")
+    assert isinstance(log_id, int)
+    assert log_id > 0
+    row = store.conn.execute("SELECT entry, date FROM daily_logs WHERE id = ?", (log_id,)).fetchone()
+    assert row[0] == "User asked about the weather"
+    assert row[1] == "2026-03-10"
+    await store.close()
+
+
+async def test_get_daily_log_by_date(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    await store.append_daily_log("Entry one", "2026-03-10")
+    await store.append_daily_log("Entry two", "2026-03-10")
+    await store.append_daily_log("Different day", "2026-03-11")
+    entries = await store.get_daily_log("2026-03-10")
+    assert len(entries) == 2
+    assert entries[0]["entry"] == "Entry one"
+    assert entries[1]["entry"] == "Entry two"
+    assert all(e["date"] == "2026-03-10" for e in entries)
+    await store.close()
+
+
+async def test_get_daily_log_returns_structure(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    await store.append_daily_log("Structured check", "2026-03-10")
+    entries = await store.get_daily_log("2026-03-10")
+    assert len(entries) == 1
+    assert set(entries[0].keys()) == {"id", "date", "entry", "created_at"}
+    await store.close()
+
+
+async def test_daily_log_default_date(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    today = date.today().isoformat()
+    log_id = await store.append_daily_log("Default date entry")
+    row = store.conn.execute("SELECT date FROM daily_logs WHERE id = ?", (log_id,)).fetchone()
+    assert row[0] == today
+    entries = await store.get_daily_log()
+    assert len(entries) == 1
+    assert entries[0]["entry"] == "Default date entry"
+    await store.close()
+
+
+async def test_promote_to_memory(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    log_id = await store.append_daily_log("User prefers dark mode", "2026-03-10")
+    mem_id = await store.promote_to_memory(log_id, tags="preference")
+    row = store.conn.execute(
+        "SELECT content, tags, source FROM memories WHERE id = ?", (mem_id,),
+    ).fetchone()
+    assert row[0] == "User prefers dark mode"
+    assert row[1] == "preference"
+    assert row[2] == "daily_log"
+    await store.close()
+
+
+async def test_promote_generates_embedding(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    log_id = await store.append_daily_log("Embedding promotion test", "2026-03-10")
+    mem_id = await store.promote_to_memory(log_id)
+    row = store.conn.execute(
+        "SELECT memory_id FROM memory_embeddings WHERE memory_id = ?", (mem_id,),
+    ).fetchone()
+    assert row is not None
+    assert row[0] == mem_id
+    await store.close()
+
+
+async def test_promote_nonexistent_raises(tmp_path):
+    store = MemoryStore(db_path=tmp_path / "memory.db")
+    await store.initialize()
+    with pytest.raises(ValueError, match="not found"):
+        await store.promote_to_memory(9999)
     await store.close()

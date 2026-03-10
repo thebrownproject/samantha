@@ -91,7 +91,7 @@ async def _safe_bash(command: str) -> str:
             command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         return format_tool_error("bash", "command timed out after 30s")
     except OSError as e:
@@ -181,8 +181,8 @@ async def _reason_deeply(task: str) -> str:
             if len(output) > MAX_DELEGATION_OUTPUT:
                 output = output[:MAX_DELEGATION_OUTPUT] + "..."
             return condense_for_voice(output)
-        except asyncio.TimeoutError:
-            last_err = asyncio.TimeoutError(
+        except TimeoutError:
+            last_err = TimeoutError(
                 f"delegation timed out after {_cfg.delegation_timeout}s"
             )
             logger.warning("reason_deeply timeout (attempt %d/%d)", attempt + 1, attempts)
@@ -269,6 +269,34 @@ async def memory_search(query: str) -> str:
         return format_tool_error("memory_search", str(exc))
 
 
+@function_tool
+async def daily_log_append(entry: str) -> str:
+    """Append an observation or event to today's daily log."""
+    if _memory is None:
+        return format_tool_error("daily_log_append", "memory store not initialized")
+    try:
+        log_id = await _memory.append_daily_log(entry)
+        return f"Logged entry #{log_id}"
+    except Exception as exc:
+        return format_tool_error("daily_log_append", str(exc))
+
+
+@function_tool
+async def daily_log_search(date: str = "") -> str:
+    """Retrieve daily log entries for a given date (YYYY-MM-DD). Defaults to today."""
+    if _memory is None:
+        return format_tool_error("daily_log_search", "memory store not initialized")
+    try:
+        date_str = date if date else None
+        entries = await _memory.get_daily_log(date_str)
+        if not entries:
+            return "No log entries found."
+        lines = [f"- [{e['created_at']}] {e['entry']}" for e in entries]
+        return "\n".join(lines)
+    except Exception as exc:
+        return format_tool_error("daily_log_search", str(exc))
+
+
 def configure_tools(config: Config) -> None:
     """Set module-level config used by tools at runtime."""
     global _cfg
@@ -285,4 +313,7 @@ def register_tools(config: Config | None = None) -> list:
     """Register and return all available tools."""
     if config:
         configure_tools(config)
-    return [safe_bash, file_read, file_write, reason_deeply, web_search, memory_save, memory_search]
+    return [
+        safe_bash, file_read, file_write, reason_deeply, web_search,
+        memory_save, memory_search, daily_log_append, daily_log_search,
+    ]

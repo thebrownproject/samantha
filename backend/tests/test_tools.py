@@ -18,10 +18,10 @@ from samantha.tools import (
     _web_search,
     condense_for_voice,
     configure_tools,
+    file_write,
     format_tool_error,
     register_tools,
     safe_bash,
-    file_write,
 )
 
 
@@ -156,13 +156,13 @@ async def test_write_safe_mode_blocks_outside_home():
 
 def test_register_tools_returns_all():
     tools = register_tools()
-    assert len(tools) == 7
+    assert len(tools) == 9
 
 
 def test_register_tools_with_config():
     cfg = Config(safe_mode=False)
     tools = register_tools(cfg)
-    assert len(tools) == 7
+    assert len(tools) == 9
 
 
 def test_register_tools_includes_reason_deeply():
@@ -221,10 +221,11 @@ async def test_reason_deeply_retry_then_succeed():
 
     mock_result = AsyncMock()
     mock_result.final_output = "recovered answer"
-    with patch("samantha.tools.Runner.run", new_callable=AsyncMock,
-               side_effect=[RuntimeError("transient"), mock_result]):
-        with patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock):
-            result = await _reason_deeply("retry task")
+    with (
+        patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=[RuntimeError("transient"), mock_result]),
+        patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        result = await _reason_deeply("retry task")
     assert result == "recovered answer"
 
 
@@ -232,10 +233,11 @@ async def test_reason_deeply_all_retries_exhausted():
     """All attempts fail -- returns fallback."""
     configure_tools(Config(safe_mode=False, delegation_timeout=5, delegation_max_retries=2))
 
-    with patch("samantha.tools.Runner.run", new_callable=AsyncMock,
-               side_effect=RuntimeError("persistent failure")):
-        with patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock):
-            result = await _reason_deeply("doomed task")
+    with (
+        patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=RuntimeError("persistent failure")),
+        patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        result = await _reason_deeply("doomed task")
     assert result == DELEGATION_FALLBACK
 
 
