@@ -87,7 +87,7 @@ class SessionManager:
         self._health_task = None
         if self._is_connected:
             self._is_connected = False
-            self._dispatcher._set_state(AppState.IDLE)
+            self._dispatcher.set_state(AppState.IDLE)
 
     async def _run_loop(self) -> None:
         """Run the session, reconnecting on failure up to max_retries."""
@@ -96,7 +96,7 @@ class SessionManager:
             try:
                 self._is_connected = True
                 if attempt > 0:
-                    self._dispatcher._set_state(AppState.IDLE)
+                    self._dispatcher.set_state(AppState.IDLE)
                     logger.info("Session reconnected (attempt %d)", attempt)
                 await self._runner.run()
                 # Clean exit from run() means session ended normally
@@ -105,7 +105,7 @@ class SessionManager:
                 break
             except Exception as exc:
                 self._is_connected = False
-                self._dispatcher._set_state(AppState.ERROR)
+                self._dispatcher.set_state(AppState.ERROR)
                 logger.warning("Session disconnected: %s", exc)
 
                 attempt += 1

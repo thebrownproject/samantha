@@ -107,7 +107,7 @@ class EventDispatcher:
     def on_error(self, cb: ErrorCallback) -> None:
         self._on_error.append(cb)
 
-    def _set_state(self, new: AppState) -> None:
+    def set_state(self, new: AppState) -> None:
         if new == self.state:
             return
         self.state = new
@@ -138,20 +138,20 @@ class EventDispatcher:
             cb(msg)
 
     def _handle_audio(self, event: Any) -> None:
-        self._set_state(AppState.SPEAKING)
+        self.set_state(AppState.SPEAKING)
         data = getattr(event, "data", None) or getattr(event, "audio", None)
         if isinstance(data, bytes):
             for cb in self._on_audio:
                 cb(data)
 
     def _handle_audio_end(self, _event: Any) -> None:
-        self._set_state(AppState.IDLE)
+        self.set_state(AppState.IDLE)
 
     def _handle_audio_interrupted(self, _event: Any) -> None:
-        self._set_state(AppState.LISTENING)
+        self.set_state(AppState.LISTENING)
 
     def _handle_tool_start(self, event: Any) -> None:
-        self._set_state(AppState.THINKING)
+        self.set_state(AppState.THINKING)
         tool = getattr(event, "tool", None)
         name = getattr(tool, "name", "unknown") if tool else "unknown"
         msg = msg_tool_start(name)
@@ -167,10 +167,10 @@ class EventDispatcher:
             cb(msg)
 
     def _handle_agent_end(self, _event: Any) -> None:
-        self._set_state(AppState.IDLE)
+        self.set_state(AppState.IDLE)
 
     def _handle_error(self, event: Any) -> None:
-        self._set_state(AppState.ERROR)
+        self.set_state(AppState.ERROR)
         error = getattr(event, "error", "unknown error")
         msg = msg_error(str(error))
         for cb in self._on_error:
@@ -181,7 +181,7 @@ class EventDispatcher:
         if not isinstance(data, dict):
             return
         if data.get("type") == "input_audio_buffer.speech_started":
-            self._set_state(AppState.LISTENING)
+            self.set_state(AppState.LISTENING)
 
     # Handler dispatch table
     _handlers: ClassVar[dict[str, Callable[[EventDispatcher, Any], None]]] = {

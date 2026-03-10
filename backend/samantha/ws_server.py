@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import json
 import logging
@@ -37,7 +38,7 @@ class WSServer:
         self._server: Any = None
 
         # Session integration hooks (set by caller before start)
-        self.received_audio: list[bytes] = []
+        self.received_audio: collections.deque[bytes] = collections.deque(maxlen=4096)
         self.injected_contexts: list[str] = []
         self.interrupt_count: int = 0
 
@@ -105,7 +106,7 @@ class WSServer:
     async def _handle_text(self, ws: ServerConnection, raw: str) -> None:
         try:
             msg = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError:
             await ws.send(json.dumps(msg_error("Invalid JSON")))
             return
 
@@ -140,7 +141,7 @@ class WSServer:
             await ws.send(json.dumps(msg_error(f"Invalid voice: {voice!r}")))
             return
         self.config.voice = voice
-        logger.info("Voice set to %s", voice)
+        logger.info("Voice set to %s (takes effect on next session)", voice)
 
     async def _on_inject_context(self, ws: ServerConnection, msg: dict) -> None:
         text = msg.get("text")

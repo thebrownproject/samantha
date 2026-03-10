@@ -72,7 +72,7 @@ def ensure_data_dir(cfg: Config) -> None:
 
 
 def load_config(path: Path | None = None) -> Config:
-    config_path = path or (Path.home() / ".samantha" / "config.json")
+    config_path = path or Config().config_path
     if config_path.exists():
         raw = json.loads(config_path.read_text())
         known = {f.name for f in fields(Config)}

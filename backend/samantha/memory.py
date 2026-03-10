@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import struct
+import threading
 from datetime import date
 from pathlib import Path
 
@@ -62,6 +63,7 @@ class MemoryStore:
         self.db_path = db_path
         self._conn: sqlite3.Connection | None = None
         self._model = None
+        self._lock = threading.Lock()
 
     @property
     def conn(self) -> sqlite3.Connection:
@@ -118,9 +120,10 @@ class MemoryStore:
 
     async def encode(self, text: str) -> list[float]:
         """Encode text into an embedding vector."""
-        model = self._get_model()
-        vec = await asyncio.to_thread(model.encode, text)
-        return vec.tolist()
+        def _encode_sync():
+            model = self._get_model()
+            return model.encode(text).tolist()
+        return await asyncio.to_thread(_encode_sync)
 
     async def save(
         self, content: str, tags: str | None = None, source: str | None = None,
@@ -130,43 +133,43 @@ class MemoryStore:
         raw_vec = _serialize_f32(embedding)
 
         def _save_sync() -> int:
-            # Dedup: check for near-identical content (cosine sim > 0.95 ~ distance < 0.05)
-            dupes = self.conn.execute(
-                """SELECT memory_id, distance
-                   FROM memory_embeddings
-                   WHERE embedding MATCH ? AND k = 1""",
-                (raw_vec,),
-            ).fetchall()
-            if dupes and dupes[0][1] < 0.05:
-                existing_id = dupes[0][0]
-                self.conn.execute(
-                    """UPDATE memories
-                       SET content = ?, tags = ?, source = ?, updated_at = CURRENT_TIMESTAMP
-                       WHERE id = ?""",
-                    (content, tags, source, existing_id),
+            with self._lock:
+                # Dedup: check for near-identical content (cosine sim > 0.95 ~ distance < 0.05)
+                dupes = self.conn.execute(
+                    """SELECT memory_id, distance
+                       FROM memory_embeddings
+                       WHERE embedding MATCH ? AND k = 1""",
+                    (raw_vec,),
+                ).fetchall()
+                if dupes and dupes[0][1] < 0.05:
+                    existing_id = dupes[0][0]
+                    self.conn.execute(
+                        """UPDATE memories
+                           SET content = ?, tags = ?, source = ?, updated_at = CURRENT_TIMESTAMP
+                           WHERE id = ?""",
+                        (content, tags, source, existing_id),
+                    )
+                    self.conn.execute(
+                        "DELETE FROM memory_embeddings WHERE memory_id = ?", (existing_id,),
+                    )
+                    self.conn.execute(
+                        "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
+                        (existing_id, raw_vec),
+                    )
+                    self.conn.commit()
+                    return existing_id
+
+                cur = self.conn.execute(
+                    "INSERT INTO memories (content, tags, source) VALUES (?, ?, ?)",
+                    (content, tags, source),
                 )
-                # Update embedding
-                self.conn.execute(
-                    "DELETE FROM memory_embeddings WHERE memory_id = ?", (existing_id,),
-                )
+                memory_id = cur.lastrowid
                 self.conn.execute(
                     "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
-                    (existing_id, raw_vec),
+                    (memory_id, raw_vec),
                 )
                 self.conn.commit()
-                return existing_id
-
-            cur = self.conn.execute(
-                "INSERT INTO memories (content, tags, source) VALUES (?, ?, ?)",
-                (content, tags, source),
-            )
-            memory_id = cur.lastrowid
-            self.conn.execute(
-                "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
-                (memory_id, raw_vec),
-            )
-            self.conn.commit()
-            return memory_id
+                return memory_id
 
         return await asyncio.to_thread(_save_sync)
 
@@ -265,12 +268,13 @@ class MemoryStore:
             date_str = date.today().isoformat()
 
         def _append_sync() -> int:
-            cur = self.conn.execute(
-                "INSERT INTO daily_logs (date, entry) VALUES (?, ?)",
-                (date_str, entry),
-            )
-            self.conn.commit()
-            return cur.lastrowid
+            with self._lock:
+                cur = self.conn.execute(
+                    "INSERT INTO daily_logs (date, entry) VALUES (?, ?)",
+                    (date_str, entry),
+                )
+                self.conn.commit()
+                return cur.lastrowid
 
         return await asyncio.to_thread(_append_sync)
 
@@ -293,9 +297,11 @@ class MemoryStore:
 
     async def promote_to_memory(self, daily_log_id: int, tags: str = "") -> int:
         """Promote a daily log entry to permanent memory. Returns the new memory ID."""
-        row = self.conn.execute(
-            "SELECT entry FROM daily_logs WHERE id = ?", (daily_log_id,),
-        ).fetchone()
+        def _fetch_entry():
+            return self.conn.execute(
+                "SELECT entry FROM daily_logs WHERE id = ?", (daily_log_id,),
+            ).fetchone()
+        row = await asyncio.to_thread(_fetch_entry)
         if row is None:
             raise ValueError(f"Daily log entry {daily_log_id} not found")
         tag_str = tags if tags else None

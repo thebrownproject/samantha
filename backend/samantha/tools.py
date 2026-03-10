@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import shlex
+import time
+import uuid
 from pathlib import Path
 
 import openai
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 _cfg: Config = Config()
 _memory: MemoryStore | None = None
+_openai_client: openai.AsyncOpenAI | None = None
 
 
 def format_tool_error(tool_name: str, error: str) -> str:
@@ -28,15 +32,24 @@ def format_tool_error(tool_name: str, error: str) -> str:
     return f"Error in {tool_name}: {short}"
 
 
+_RE_CODE_BLOCK = re.compile(r"```[\s\S]*?```")
+_RE_INLINE_CODE = re.compile(r"`([^`]+)`")
+_RE_HEADING = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_RE_LIST_ITEM = re.compile(r"^[\s]*[-*]\s+", re.MULTILINE)
+_RE_BOLD = re.compile(r"\*{1,2}([^*]+)\*{1,2}")
+_RE_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_RE_BLANK_LINES = re.compile(r"\n{2,}")
+
+
 def condense_for_voice(text: str, max_chars: int = 500) -> str:
     """Strip markdown/code artifacts and truncate for spoken delivery."""
-    out = re.sub(r"```[\s\S]*?```", "", text)
-    out = re.sub(r"`([^`]+)`", r"\1", out)
-    out = re.sub(r"^#{1,6}\s+", "", out, flags=re.MULTILINE)
-    out = re.sub(r"^[\s]*[-*]\s+", "", out, flags=re.MULTILINE)
-    out = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", out)
-    out = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", out)
-    out = re.sub(r"\n{2,}", " ", out)
+    out = _RE_CODE_BLOCK.sub("", text)
+    out = _RE_INLINE_CODE.sub(r"\1", out)
+    out = _RE_HEADING.sub("", out)
+    out = _RE_LIST_ITEM.sub("", out)
+    out = _RE_BOLD.sub(r"\1", out)
+    out = _RE_LINK.sub(r"\1", out)
+    out = _RE_BLANK_LINES.sub(" ", out)
     out = out.strip()
     if len(out) <= max_chars:
         return out
@@ -92,7 +105,9 @@ async def _safe_bash(command: str) -> str:
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
     except TimeoutError:
-        proc.kill()
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+            await proc.wait()
         return format_tool_error("bash", "command timed out after 30s")
     except OSError as e:
         return format_tool_error("bash", str(e))
@@ -111,8 +126,9 @@ async def _file_read(path: str) -> str:
         return format_tool_error("file_read", f"file not found: {resolved}")
     if resolved.is_dir():
         return format_tool_error("file_read", f"path is a directory: {resolved}")
-    if resolved.stat().st_size > MAX_READ:
-        return format_tool_error("file_read", f"file too large ({resolved.stat().st_size} bytes)")
+    size = resolved.stat().st_size
+    if size > MAX_READ:
+        return format_tool_error("file_read", f"file too large ({size} bytes)")
     try:
         return resolved.read_text(errors="replace")
     except PermissionError:
@@ -163,10 +179,10 @@ DELEGATION_FALLBACK = (
 )
 
 
-async def _reason_deeply(task: str) -> str:
-    import time
-    import uuid
+MAX_BACKOFF_DELAY = 30.0
 
+
+async def _reason_deeply(task: str) -> str:
     correlation_id = uuid.uuid4().hex[:12]
     model = _cfg.reasoning_model
     agent = Agent(
@@ -206,7 +222,7 @@ async def _reason_deeply(task: str) -> str:
                 "reason_deeply error (attempt %d/%d): %s", attempt + 1, attempts, exc,
             )
         if attempt < attempts - 1:
-            await asyncio.sleep(1.0 * (2 ** attempt))
+            await asyncio.sleep(min(1.0 * (2 ** attempt), MAX_BACKOFF_DELAY))
 
     duration = time.monotonic() - t_start
     logger.error(
@@ -222,9 +238,16 @@ async def reason_deeply(task: str) -> str:
     return await _reason_deeply(task)
 
 
+def _get_openai_client() -> openai.AsyncOpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = openai.AsyncOpenAI()
+    return _openai_client
+
+
 async def _web_search(query: str) -> str:
     """Search the web via OpenAI Responses API and return structured results."""
-    client = openai.AsyncOpenAI()
+    client = _get_openai_client()
     try:
         response = await client.responses.create(
             model="gpt-4o-mini",

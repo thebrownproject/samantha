@@ -269,11 +269,14 @@ async def test_web_search_returns_results():
     message_item = SimpleNamespace(type="message", content=[text_block])
     mock_response = SimpleNamespace(output=[message_item])
 
+    import samantha.tools as _tools_mod
+    _tools_mod._openai_client = None  # reset singleton so mock takes effect
     with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
         mock_client = MagicMock()
         mock_client.responses.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client
         result = await _web_search("test query")
+    _tools_mod._openai_client = None  # clean up
 
     assert "Here are results." in result
     assert "Example" in result
@@ -281,6 +284,8 @@ async def test_web_search_returns_results():
 
 
 async def test_web_search_handles_empty_results():
+    import samantha.tools as _tools_mod
+    _tools_mod._openai_client = None
     mock_response = SimpleNamespace(output=[])
 
     with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
@@ -288,16 +293,20 @@ async def test_web_search_handles_empty_results():
         mock_client.responses.create = AsyncMock(return_value=mock_response)
         mock_cls.return_value = mock_client
         result = await _web_search("obscure query xyz")
+    _tools_mod._openai_client = None
 
     assert "No results found" in result
 
 
 async def test_web_search_handles_api_error():
+    import samantha.tools as _tools_mod
+    _tools_mod._openai_client = None
     with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
         mock_client = MagicMock()
         mock_client.responses.create = AsyncMock(side_effect=RuntimeError("API error"))
         mock_cls.return_value = mock_client
         result = await _web_search("fail query")
+    _tools_mod._openai_client = None
 
     assert "Error in web_search" in result
 
