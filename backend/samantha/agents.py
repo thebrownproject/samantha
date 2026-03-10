@@ -41,7 +41,7 @@ def create_voice_agent(cfg: Config | None = None) -> tuple[RealtimeAgent, dict]:
     agent = RealtimeAgent(
         name="samantha",
         instructions=SYSTEM_PROMPT,
-        tools=register_tools(),
+        tools=register_tools(cfg),
     )
 
     return agent, build_runner_config(cfg)

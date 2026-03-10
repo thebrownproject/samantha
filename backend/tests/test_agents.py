@@ -82,3 +82,23 @@ def test_create_voice_agent_has_tools():
     assert "safe_bash" in tool_names
     assert "file_read" in tool_names
     assert "file_write" in tool_names
+
+
+def test_create_voice_agent_passes_config_to_tools():
+    from samantha import tools
+    from samantha.agents import create_voice_agent
+
+    cfg = Config(safe_mode=False, bash_allowlist=["ls", "echo"])
+    create_voice_agent(cfg)
+    assert tools._cfg is cfg
+    assert tools._cfg.safe_mode is False
+    assert tools._cfg.bash_allowlist == ["ls", "echo"]
+
+
+def test_create_voice_agent_default_config_propagates():
+    from samantha import tools
+    from samantha.agents import create_voice_agent
+
+    create_voice_agent()
+    assert tools._cfg.safe_mode is True
+    assert tools._cfg.bash_allowlist == []
