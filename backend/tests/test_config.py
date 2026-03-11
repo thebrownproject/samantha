@@ -16,12 +16,12 @@ def test_default_values():
     assert cfg.model_name == "gpt-realtime"
     assert cfg.reasoning_model == "gpt-5-mini-2025-08-07"
     assert cfg.transcription_model == "gpt-4o-mini-transcribe"
-    assert cfg.voice == "ash"
+    assert cfg.voice == "sage"
     assert cfg.turn_detection_type == "semantic_vad"
     assert cfg.interrupt_response is True
     assert cfg.ws_host == "localhost"
     assert cfg.ws_port == 9090
-    assert cfg.bash_allowlist == []
+    assert len(cfg.bash_allowlist) > 0  # has safe defaults like open, ls, etc.
     assert cfg.log_level == "INFO"
     assert cfg.data_dir.name == ".samantha"
 
@@ -38,7 +38,7 @@ def test_partial_config_merge(tmp_path):
 
 def test_load_missing_file_returns_defaults(tmp_path):
     cfg = load_config(tmp_path / "nonexistent.json")
-    assert cfg.voice == "ash"
+    assert cfg.voice == "sage"
     assert cfg.ws_port == 9090
     assert cfg.data_dir == tmp_path
 
@@ -98,7 +98,7 @@ def test_to_dict():
     cfg = Config()
     d = cfg.to_dict()
     assert isinstance(d["data_dir"], str)
-    assert d["voice"] == "ash"
+    assert d["voice"] == "sage"
     assert d["ws_port"] == 9090
 
 

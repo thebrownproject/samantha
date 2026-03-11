@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agents.mcp import MCPServerStdio
 from agents.realtime import RealtimeAgent
 
 from samantha.config import Config
@@ -21,7 +20,7 @@ def build_runner_config(cfg: Config) -> dict:
             "audio": {
                 "input": {
                     "format": AUDIO_FORMAT,
-                    "transcription": {"model": cfg.transcription_model},
+                    "transcription": {"model": cfg.transcription_model, "language": "en"},
                     "turn_detection": {
                         "type": cfg.turn_detection_type,
                         "create_response": True,
@@ -35,10 +34,7 @@ def build_runner_config(cfg: Config) -> dict:
     }
 
 
-def create_voice_agent(
-    cfg: Config | None = None,
-    mcp_servers: list[MCPServerStdio] | None = None,
-) -> tuple[RealtimeAgent, dict]:
+def create_voice_agent(cfg: Config | None = None) -> tuple[RealtimeAgent, dict]:
     """Create the primary voice agent and its runner config.
 
     Returns (agent, runner_config) for use by ws_server.
@@ -46,13 +42,9 @@ def create_voice_agent(
     if cfg is None:
         cfg = Config()
 
-    kwargs: dict = {
-        "name": "samantha",
-        "instructions": SYSTEM_PROMPT,
-        "tools": register_tools(cfg),
-    }
-    if mcp_servers:
-        kwargs["mcp_servers"] = mcp_servers
-
-    agent = RealtimeAgent(**kwargs)
+    agent = RealtimeAgent(
+        name="samantha",
+        instructions=SYSTEM_PROMPT,
+        tools=register_tools(cfg),
+    )
     return agent, build_runner_config(cfg)

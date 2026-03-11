@@ -67,8 +67,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if keyPath == "selectedVoice", let voice = change?[.newKey] as? String {
             Task { @MainActor in
                 guard webSocketClient.connectionState == .connected else { return }
-                try? await webSocketClient.setVoice(voice)
-                consoleState.log("Voice changed to: \(voice)")
+                do {
+                    try await webSocketClient.setVoice(voice)
+                    consoleState.log("Voice changed to: \(voice)")
+                } catch {
+                    consoleState.log("Failed to change voice: \(error.localizedDescription)", level: .error)
+                }
             }
         }
     }
@@ -86,13 +90,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Listening Toggle
 
     private func toggleListening() {
+        guard consoleState.connectionState == .connected else {
+            consoleState.log("Not connected to backend", level: .warning)
+            return
+        }
         switch consoleState.appState {
         case .idle:
             beginListening()
         case .listening:
             stopListening()
-        case .thinking, .speaking, .error:
+        case .thinking, .speaking:
             interruptConversation()
+        case .error:
+            consoleState.appState = .idle
+            consoleState.log("Reset from error state")
         }
     }
 
@@ -131,12 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopListening() {
         Task { @MainActor in
-            audioManager.stopInputCapture()
-            consoleState.isCapturing = false
-            consoleState.log("Mic capture stopped")
+            // Keep mic streaming for server-side VAD barge-in detection.
+            // Only stop mic on explicit interrupt or disconnect.
             do {
                 try await webSocketClient.stopListening()
-                consoleState.log("Listening stopped")
+                consoleState.log("Listening stopped (mic stays on for barge-in)")
             } catch {
                 consoleState.appState = .error
                 consoleState.log("Failed to stop listening: \(error.localizedDescription)", level: .error)
@@ -160,13 +170,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Tool Approval (stub -- wired to WebSocketClient public methods in Task 3 / sam-d5g)
+    // MARK: - Tool Approval
 
     private func approveToolCall(callId: String, always: Bool) {
         consoleState.log("Approve tool call: \(callId) (always: \(always))", level: .info)
         consoleState.removeApproval(callId: callId)
         Task {
-            try? await webSocketClient.approveToolCall(callId: callId, always: always)
+            do {
+                try await webSocketClient.approveToolCall(callId: callId, always: always)
+            } catch {
+                consoleState.log("Failed to send approval: \(error.localizedDescription)", level: .error)
+            }
         }
     }
 
@@ -174,7 +188,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         consoleState.log("Reject tool call: \(callId) (always: \(always))", level: .info)
         consoleState.removeApproval(callId: callId)
         Task {
-            try? await webSocketClient.rejectToolCall(callId: callId, always: always)
+            do {
+                try await webSocketClient.rejectToolCall(callId: callId, always: always)
+            } catch {
+                consoleState.log("Failed to send rejection: \(error.localizedDescription)", level: .error)
+            }
         }
     }
 
@@ -211,9 +229,15 @@ extension AppDelegate: WebSocketClientDelegate {
 
         switch state {
         case .connected:
-            let voice = UserDefaults.standard.string(forKey: "selectedVoice") ?? "ash"
-            Task { try? await webSocketClient.setVoice(voice) }
-            consoleState.log("Synced voice: \(voice)", level: .debug)
+            let voice = UserDefaults.standard.string(forKey: "selectedVoice") ?? "sage"
+            Task {
+                do {
+                    try await webSocketClient.setVoice(voice)
+                    consoleState.log("Synced voice: \(voice)", level: .debug)
+                } catch {
+                    consoleState.log("Failed to sync voice: \(error.localizedDescription)", level: .error)
+                }
+            }
         case .disconnected:
             if consoleState.appState != .idle {
                 audioManager.stopCapture()
@@ -230,7 +254,6 @@ extension AppDelegate: WebSocketClientDelegate {
         consoleState.appState = state
         consoleState.log("state_change -> \(state.rawValue)")
 
-        // Sync isPlaying/isCapturing from backend state
         if state == .idle || state == .error {
             consoleState.isCapturing = false
         }
@@ -244,7 +267,7 @@ extension AppDelegate: WebSocketClientDelegate {
 
     func webSocketClient(_ client: WebSocketClient, didReceiveAudio data: Data) {
         audioManager.enqueueAudio(data: data)
-        consoleState.isPlaying = true
+        if !consoleState.isPlaying { consoleState.isPlaying = true }
         playbackFrameCount += 1
         if playbackFrameCount % 50 == 0 {
             consoleState.log("Audio: received \(data.count) bytes (frame \(playbackFrameCount))", level: .debug)

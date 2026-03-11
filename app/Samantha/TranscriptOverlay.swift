@@ -9,6 +9,23 @@ struct TranscriptEntry: Identifiable {
     var isFinal: Bool
 
     var isUser: Bool { role == "user" }
+
+    /// Merge a transcript update into an array, coalescing partials for the same role.
+    static func merge(
+        into entries: inout [TranscriptEntry],
+        role: String, text: String, isFinal: Bool,
+        maxEntries: Int
+    ) {
+        if let last = entries.last, last.role == role, !last.isFinal {
+            entries[entries.count - 1].text = text
+            entries[entries.count - 1].isFinal = isFinal
+        } else {
+            entries.append(TranscriptEntry(role: role, text: text, isFinal: isFinal))
+        }
+        if entries.count > maxEntries {
+            entries.removeFirst(entries.count - maxEntries)
+        }
+    }
 }
 
 @MainActor
@@ -37,15 +54,7 @@ final class TranscriptStore: ObservableObject {
     /// Accepts a decoded IPC transcript message from WebSocket.
     /// Merges partial updates for the same role into one entry, replaces on final.
     func handleTranscript(role: String, text: String, isFinal: Bool) {
-        if let last = entries.last, last.role == role, !last.isFinal {
-            entries[entries.count - 1].text = text
-            entries[entries.count - 1].isFinal = isFinal
-        } else {
-            entries.append(TranscriptEntry(role: role, text: text, isFinal: isFinal))
-        }
-        if entries.count > Self.maxEntries {
-            entries.removeFirst(entries.count - Self.maxEntries)
-        }
+        TranscriptEntry.merge(into: &entries, role: role, text: text, isFinal: isFinal, maxEntries: Self.maxEntries)
     }
 
     func clear() {

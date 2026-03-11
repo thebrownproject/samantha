@@ -44,9 +44,11 @@ class InterruptionHandler:
         return InterruptResult(clear_playback=True, new_state=AppState.LISTENING)
 
     def handle_manual_interrupt(self) -> InterruptResult:
-        if not self.is_interruptible:
-            return _NOOP
-        return InterruptResult(clear_playback=True, new_state=AppState.LISTENING)
+        if self._current_state == AppState.SPEAKING:
+            return InterruptResult(clear_playback=True, new_state=AppState.LISTENING)
+        if self._current_state == AppState.THINKING:
+            return InterruptResult(clear_playback=False, new_state=AppState.IDLE)
+        return _NOOP
 
     def wire(self, dispatcher: EventDispatcher) -> None:
         dispatcher.on_state_change(self.on_state_changed)

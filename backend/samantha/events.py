@@ -206,7 +206,9 @@ class EventDispatcher:
 
     def _handle_audio(self, event: Any) -> None:
         self.set_state(AppState.SPEAKING)
-        data = getattr(event, "data", None) or getattr(event, "audio", None)
+        # RealtimeAudio wraps a RealtimeModelAudioEvent in .audio; bytes are at .audio.data
+        audio_obj = getattr(event, "audio", None)
+        data = getattr(audio_obj, "data", None) or getattr(event, "data", None)
         if isinstance(data, bytes):
             for cb in self._on_audio:
                 cb(data)

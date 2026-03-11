@@ -34,7 +34,7 @@ def test_build_runner_config_defaults(cfg):
     assert ms["audio"]["input"]["turn_detection"]["create_response"] is True
     assert ms["audio"]["input"]["turn_detection"]["interrupt_response"] is True
     assert ms["audio"]["output"]["format"] == "pcm16"
-    assert ms["audio"]["output"]["voice"] == "ash"
+    assert ms["audio"]["output"]["voice"] == "sage"
     assert rc["async_tool_calls"] is True
     assert ms["tool_choice"] == "auto"
 
@@ -112,4 +112,4 @@ def test_create_voice_agent_default_config_propagates():
 
     create_voice_agent()
     assert tools._cfg.safe_mode is True
-    assert tools._cfg.bash_allowlist == []
+    assert len(tools._cfg.bash_allowlist) > 0

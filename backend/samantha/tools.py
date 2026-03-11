@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import re
 import shlex
 import time
@@ -109,6 +110,8 @@ async def _safe_bash(command: str) -> str:
             return format_tool_error("bash", "bash_allowlist is empty in safe mode")
         if base_cmd not in _cfg.bash_allowlist:
             return format_tool_error("bash", f"'{base_cmd}' not in bash allowlist")
+        # exec mode has no shell -- expand ~ and $HOME in arguments
+        parts = [os.path.expandvars(os.path.expanduser(p)) for p in parts]
 
     try:
         if _cfg.safe_mode:
@@ -139,8 +142,20 @@ async def _safe_bash(command: str) -> str:
     return output or "(no output)"
 
 
+def _resolve_user_path(path: str) -> Path:
+    """Resolve a path from the voice assistant's perspective.
+
+    Relative paths (e.g. 'Desktop/file.md') are resolved against the user's
+    home directory, not the backend's CWD.
+    """
+    p = Path(path).expanduser()
+    if p.is_absolute():
+        return p.resolve()
+    return (Path.home() / p).resolve()
+
+
 async def _file_read(path: str) -> str:
-    resolved = Path(path).resolve()
+    resolved = _resolve_user_path(path)
     if err := _check_path(resolved):
         return format_tool_error("file_read", err)
     if not resolved.exists():
@@ -157,7 +172,7 @@ async def _file_read(path: str) -> str:
 
 
 async def _file_write(path: str, content: str) -> str:
-    resolved = Path(path).resolve()
+    resolved = _resolve_user_path(path)
     if err := _check_path(resolved, write=True):
         return format_tool_error("file_write", err)
     try:
@@ -175,10 +190,45 @@ async def _needs_approval_check(_ctx, _args, _call_id) -> bool:
     return _cfg.confirm_destructive
 
 
+async def _applescript(script: str) -> str:
+    """Execute AppleScript via osascript and return output."""
+    proc: asyncio.subprocess.Process | None = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+    except TimeoutError:
+        if proc is not None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+                await proc.wait()
+        return format_tool_error("applescript", "script timed out after 30s")
+    except OSError as e:
+        return format_tool_error("applescript", str(e))
+
+    output = stdout.decode(errors="replace").strip()
+    errors = stderr.decode(errors="replace").strip()
+    if proc.returncode != 0 and errors:
+        return format_tool_error("applescript", errors)
+    result = output or errors or "(no output)"
+    if len(result) > MAX_OUTPUT:
+        result = result[:MAX_OUTPUT] + f"\n... truncated ({len(result)} bytes total)"
+    return result
+
+
 @function_tool(needs_approval=_needs_approval_check)
 async def safe_bash(command: str) -> str:
     """Execute a shell command with safety controls and timeout."""
     return await _safe_bash(command)
+
+
+@function_tool(needs_approval=_needs_approval_check)
+async def applescript(script: str) -> str:
+    """Execute AppleScript to control macOS applications. Use for Calendar, Reminders, Finder, Safari, Music, Spotify, Notes, Messages, Mail, System Events, and other scriptable apps."""
+    return await _applescript(script)
 
 
 @function_tool
@@ -598,6 +648,7 @@ def register_tools(config: Config | None = None) -> list:
         configure_tools(config)
     return [
         safe_bash,
+        applescript,
         file_read,
         file_write,
         reason_deeply,

@@ -149,11 +149,11 @@ final class WebSocketClient: ObservableObject {
     private func openConnection() async {
         guard shouldReconnect else { return }
 
-        // Fresh session per connection attempt to avoid stale delegate state
         let newSession = URLSession(configuration: .default, delegate: sessionDelegate, delegateQueue: nil)
         session = newSession
 
         let task = newSession.webSocketTask(with: url)
+        task.maximumMessageSize = 20 * 1024 * 1024  // 20 MB -- screenshots are large base64
         socketTask = task
         connectionState = .connecting
         delegate?.webSocketClient(self, didChangeConnectionState: .connecting)
@@ -170,7 +170,7 @@ final class WebSocketClient: ObservableObject {
 
         Task {
             do {
-                try await sendJSON(["type": "get_state"])
+                try await requestState()
             } catch {
                 wsLog.error("Initial get_state send failed: \(error.localizedDescription)")
             }
@@ -213,6 +213,8 @@ final class WebSocketClient: ObservableObject {
         receiveTask?.cancel()
         receiveTask = nil
         socketTask = nil
+        session?.invalidateAndCancel()
+        session = nil
         connectionState = .disconnected
         delegate?.webSocketClient(self, didChangeConnectionState: .disconnected)
 
@@ -275,23 +277,24 @@ final class WebSocketClient: ObservableObject {
 
     private func handleAppToolCall(_ message: [String: Any]) async {
         guard let requestID = message["request_id"] as? String, !requestID.isEmpty else {
-            try? await sendAppToolResult(requestID: "missing", ok: false, result: nil, error: "Missing request_id")
+            do { try await sendAppToolResult(requestID: "missing", ok: false, result: nil, error: "Missing request_id") }
+            catch { wsLog.error("Failed to send app tool error: \(error.localizedDescription)") }
             return
         }
 
         guard let tool = message["tool"] as? String, !tool.isEmpty else {
-            try? await sendAppToolResult(requestID: requestID, ok: false, result: nil, error: "Missing tool")
+            do { try await sendAppToolResult(requestID: requestID, ok: false, result: nil, error: "Missing tool") }
+            catch { wsLog.error("Failed to send app tool error: \(error.localizedDescription)") }
             return
         }
 
         let args = message["args"] as? [String: Any] ?? [:]
         guard let appToolExecutor else {
-            try? await sendAppToolResult(
-                requestID: requestID,
-                ok: false,
-                result: nil,
-                error: "No app tool executor configured"
-            )
+            do {
+                try await sendAppToolResult(requestID: requestID, ok: false, result: nil, error: "No app tool executor configured")
+            } catch {
+                wsLog.error("Failed to send app tool error: \(error.localizedDescription)")
+            }
             return
         }
 
@@ -317,12 +320,11 @@ final class WebSocketClient: ObservableObject {
                 "request_id": requestID,
                 "ok": false,
             ])
-            try? await sendAppToolResult(
-                requestID: requestID,
-                ok: false,
-                result: nil,
-                error: error.localizedDescription
-            )
+            do {
+                try await sendAppToolResult(requestID: requestID, ok: false, result: nil, error: error.localizedDescription)
+            } catch let sendError {
+                wsLog.error("Failed to send app tool error result: \(sendError.localizedDescription)")
+            }
         }
     }
 

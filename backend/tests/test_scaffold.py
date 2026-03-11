@@ -24,7 +24,6 @@ REQUIRED_RUNTIME_DEPS = [
     "websockets",
     "sqlite-vec",
     "sentence-transformers",
-    "mcp",
 ]
 
 REQUIRED_DEV_DEPS = ["pytest", "pytest-asyncio", "ruff"]

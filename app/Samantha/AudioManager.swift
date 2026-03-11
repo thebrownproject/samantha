@@ -152,11 +152,6 @@ final class AudioManager: ObservableObject {
     /// Attach and connect playerNode to the shared engine. Starts engine if not running.
     /// Re-calls play() if the node exists but was stopped.
     private func ensurePlayerReady() throws {
-        if let player = playerNode {
-            if !player.isPlaying { player.play() }
-            return
-        }
-
         let engine: AVAudioEngine
         if let existing = self.audioEngine {
             engine = existing
@@ -165,19 +160,31 @@ final class AudioManager: ObservableObject {
             self.audioEngine = engine
         }
 
-        let player = AVAudioPlayerNode()
-        engine.attach(player)
+        if playerNode == nil {
+            // Must stop engine before modifying the audio graph
+            let wasRunning = engine.isRunning
+            if wasRunning { engine.stop() }
 
-        engine.connect(player, to: engine.mainMixerNode, format: AudioConstants.pcm16Format)
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: AudioConstants.pcm16Format)
+            self.playerNode = player
+
+            engine.prepare()
+            try engine.start()
+            player.play()
+            log.info("Playback player node attached and playing")
+            return
+        }
 
         if !engine.isRunning {
             engine.prepare()
             try engine.start()
         }
 
-        player.play()
-        self.playerNode = player
-        log.info("Playback player node attached and playing")
+        if let player = playerNode, !player.isPlaying {
+            player.play()
+        }
     }
 
     private func pcm16DataToBuffer(_ data: Data) -> AVAudioPCMBuffer? {

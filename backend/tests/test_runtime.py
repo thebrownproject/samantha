@@ -143,6 +143,8 @@ async def test_runtime_controls_audio_commit_context_and_approvals(cfg):
     assert ws.app_state == AppState.LISTENING
 
     await runtime.handle_audio_chunk(b"\x00\x01")
+    await runtime.handle_audio_chunk(b"\x00\x02")
+    await runtime.handle_audio_chunk(b"\x00\x03")
     await runtime.handle_stop_listening()
     await runtime.handle_inject_context("user is tired")
 
@@ -152,7 +154,7 @@ async def test_runtime_controls_audio_commit_context_and_approvals(cfg):
     await runtime.handle_reject_tool_call("call_2", False)
     await asyncio.sleep(0.05)
 
-    assert session.sent_audio == [(b"\x00\x01", False)]
+    assert session.sent_audio == [(b"\x00\x01", False), (b"\x00\x02", False), (b"\x00\x03", False)]
     assert session.interrupt_calls == 1
     assert session.approved == [("call_1", True)]
     assert session.rejected == [("call_2", False)]
@@ -367,7 +369,7 @@ async def test_runtime_persists_voice_change_and_refreshes_session(cfg):
     await runtime.handle_start_listening()
     await asyncio.sleep(0.05)
     assert runners[0].run_calls == 1
-    assert runner_configs[0]["model_settings"]["audio"]["output"]["voice"] == "ash"
+    assert runner_configs[0]["model_settings"]["audio"]["output"]["voice"] == "sage"
 
     await runtime.handle_voice_changed("coral")
     persisted = load_config(cfg.config_path)

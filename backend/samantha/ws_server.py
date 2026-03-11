@@ -68,6 +68,7 @@ class WSServer:
             self._handler,
             self.config.ws_host,
             self.config.ws_port,
+            max_size=20 * 1024 * 1024,  # 20 MB -- screenshots are large base64
         )
 
     async def stop(self) -> None:

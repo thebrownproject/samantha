@@ -6,7 +6,6 @@ import signal
 
 from samantha.agents import create_voice_agent
 from samantha.config import load_config
-from samantha.mcp_integration import create_mcp_server
 from samantha.memory import MemoryStore
 from samantha.runtime import RealtimeRuntime
 from samantha.storage import bootstrap_storage
@@ -29,19 +28,8 @@ async def _run() -> None:
         configure_memory(memory)
         logger.info("Memory initialized at %s", memory.db_path)
 
-    # MCP setup (macOS only)
-    mcp_server = create_mcp_server(cfg)
-    mcp_servers = [mcp_server] if mcp_server else []
-    for server in mcp_servers:
-        try:
-            await server.connect()
-            logger.info("MCP server connected")
-        except Exception:
-            logger.warning("MCP server failed to connect, continuing without it", exc_info=True)
-            mcp_servers = []
-
     # Create agent
-    agent, runner_config = create_voice_agent(cfg, mcp_servers=mcp_servers or None)
+    agent, runner_config = create_voice_agent(cfg)
     logger.info("Agent '%s' ready (model=%s, voice=%s)", agent.name, cfg.model_name, cfg.voice)
 
     # Start WebSocket server
@@ -71,11 +59,6 @@ async def _run() -> None:
         await ws.stop()
         if cfg.memory_enabled:
             await memory.close()
-        for server in mcp_servers:
-            try:
-                await server.cleanup()
-            except Exception:
-                logger.warning("MCP cleanup failed", exc_info=True)
         logger.info("Shutdown complete")
 
 

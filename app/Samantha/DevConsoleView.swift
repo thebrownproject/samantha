@@ -181,9 +181,13 @@ struct DevConsoleView: View {
             Button("Interrupt", action: actions.onInterrupt)
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
-                .disabled(state.appState == .idle)
+                .disabled(state.appState == .idle && !state.isCapturing && !state.isPlaying)
 
             Button("Clear", action: actions.onClearLog)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+            Button("Copy", action: copyLog)
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
 
@@ -204,6 +208,14 @@ struct DevConsoleView: View {
         case .listening: "Listening..."
         default: "Talk (Opt+S)"
         }
+    }
+
+    private func copyLog() {
+        let text = state.logEntries.map { entry in
+            "[\(Self.timeFormatter.string(from: entry.timestamp))] \(entry.message)"
+        }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func openSettings() {

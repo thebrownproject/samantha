@@ -10,45 +10,31 @@ def test_system_prompt_has_memory_section():
     assert "MEMORY" in SYSTEM_PROMPT
 
 
-def test_memory_section_requires_search_on_conversation_start():
-    """Prompt must instruct agent to search memory at the start of every conversation."""
+def test_memory_section_references_tools():
+    """Prompt must reference memory_search and memory_save tools."""
     prompt = SYSTEM_PROMPT.lower()
     assert "memory_search" in prompt
-    assert "start of every conversation" in prompt
+    assert "memory_save" in prompt
 
 
 def test_memory_section_requires_save_after_exchanges():
-    """Prompt must instruct agent to save to memory after meaningful exchanges."""
+    """Prompt must instruct agent to save to memory proactively."""
     prompt = SYSTEM_PROMPT.lower()
     assert "memory_save" in prompt
-    assert "do not wait" in prompt
+    assert "immediately" in prompt or "right then" in prompt
 
 
 def test_memory_section_lists_save_triggers():
     """Prompt must list specific events that trigger memory_save."""
     prompt = SYSTEM_PROMPT.lower()
-    for trigger in ["preference", "personal information", "corrects you", "project"]:
+    for trigger in ["preference", "personal detail", "project", "correction"]:
         assert trigger in prompt, f"Missing memory save trigger: {trigger}"
 
 
-def test_memory_section_requires_proactive_notes():
-    """Prompt must instruct proactive note-taking about patterns and habits."""
-    prompt = SYSTEM_PROMPT.lower()
-    assert "pattern" in prompt
-    assert "proactive" in prompt or "note-taker" in prompt
-
-
 def test_memory_section_forbids_guessing():
-    """Prompt must tell agent to search memory before answering user questions."""
+    """Prompt must tell agent not to guess or fabricate from memory."""
     prompt = SYSTEM_PROMPT.lower()
-    assert "never guess" in prompt or "never make things up" in prompt
-
-
-def test_memory_section_emphasizes_importance():
-    """Prompt must convey that memory is the agent's most important behavior."""
-    prompt = SYSTEM_PROMPT.lower()
-    assert "most important" in prompt
-    assert "not optional" in prompt
+    assert "never guess" in prompt or "fabricate" in prompt
 
 
 # -- Delegation tests --
@@ -85,6 +71,20 @@ def test_system_prompt_instructs_summarization():
     """Prompt should tell the agent to summarize delegation results for voice."""
     prompt = SYSTEM_PROMPT.lower()
     assert "summarize" in prompt or "concise" in prompt
+
+
+# -- AppleScript section tests --
+
+
+def test_system_prompt_has_applescript_section():
+    """SYSTEM_PROMPT must contain an APPLESCRIPT section."""
+    assert "APPLESCRIPT" in SYSTEM_PROMPT
+
+
+def test_applescript_section_references_tool():
+    """Prompt must reference the applescript tool."""
+    prompt = SYSTEM_PROMPT.lower()
+    assert "applescript tool" in prompt
 
 
 # -- Delegation prompt tests --

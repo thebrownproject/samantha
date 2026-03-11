@@ -34,18 +34,20 @@ class Config:
     model_name: str = "gpt-realtime"
     reasoning_model: str = "gpt-5-mini-2025-08-07"
     transcription_model: str = "gpt-4o-mini-transcribe"
-    voice: str = "ash"
+    voice: str = "sage"
     turn_detection_type: str = "semantic_vad"
     interrupt_response: bool = True
     ws_host: str = "localhost"
     ws_port: int = 9090
     data_dir: Path = field(default_factory=lambda: Path.home() / ".samantha")
-    bash_allowlist: list[str] = field(default_factory=list)
+    bash_allowlist: list[str] = field(default_factory=lambda: [
+        "open", "ls", "cat", "head", "tail", "wc", "file", "which", "whoami",
+        "date", "cal", "pwd", "echo", "mkdir", "cp", "mv", "rm", "touch",
+        "grep", "find", "sort", "uniq", "diff", "tr", "cut", "pbcopy", "pbpaste",
+    ])
     log_level: str = "INFO"
     delegation_timeout: int = 30
     delegation_max_retries: int = 1
-    mcp_enabled: bool = True
-    mcp_server_command: str = ""
 
     def __post_init__(self):
         if isinstance(self.data_dir, str):

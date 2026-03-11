@@ -179,13 +179,13 @@ async def test_write_safe_mode_blocks_outside_home():
 
 def test_register_tools_returns_all():
     tools = register_tools()
-    assert len(tools) == 11
+    assert len(tools) == 12
 
 
 def test_register_tools_with_config():
     cfg = Config(safe_mode=False)
     tools = register_tools(cfg)
-    assert len(tools) == 11
+    assert len(tools) == 12
 
 
 def test_register_tools_includes_reason_deeply():

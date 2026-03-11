@@ -21,16 +21,10 @@ final class DevConsoleState {
         }
     }
 
+    private static let maxTranscriptEntries = 50
+
     func addTranscript(role: String, text: String, isFinal: Bool) {
-        if let last = transcriptEntries.last, last.role == role, !last.isFinal {
-            transcriptEntries[transcriptEntries.count - 1].text = text
-            transcriptEntries[transcriptEntries.count - 1].isFinal = isFinal
-        } else {
-            transcriptEntries.append(TranscriptEntry(role: role, text: text, isFinal: isFinal))
-        }
-        if transcriptEntries.count > 50 {
-            transcriptEntries.removeFirst(transcriptEntries.count - 50)
-        }
+        TranscriptEntry.merge(into: &transcriptEntries, role: role, text: text, isFinal: isFinal, maxEntries: Self.maxTranscriptEntries)
     }
 
     func addApproval(callId: String, toolName: String, argsDescription: String) {

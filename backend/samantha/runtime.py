@@ -58,6 +58,7 @@ class RealtimeRuntime:
         self._started = False
         self._last_connect_error: Exception | None = None
         self._turn_has_audio = False
+        self._turn_audio_chunks = 0
         self._turn_counter = 0
         self._active_turn_id: str | None = None
         self._turn_started_at = 0.0
@@ -131,22 +132,29 @@ class RealtimeRuntime:
         await self.wait_until_ready()
         self._start_turn()
         self._turn_has_audio = False
+        self._turn_audio_chunks = 0
         self._dispatcher.set_state(AppState.LISTENING)
 
     async def handle_stop_listening(self) -> None:
-        if self._session is None or not self._turn_has_audio:
+        # Need at least ~100ms of audio (roughly 3 chunks at 1024 frames / 24kHz)
+        # to avoid "buffer too small" rejection from the server.
+        min_chunks = 3
+        if self._session is None or not self._turn_has_audio or self._turn_audio_chunks < min_chunks:
             self._turn_has_audio = False
+            self._turn_audio_chunks = 0
             self._dispatcher.set_state(AppState.IDLE)
             return
 
         await self._send_raw_message("input_audio_buffer.commit")
         self._turn_has_audio = False
+        self._turn_audio_chunks = 0
         self._dispatcher.set_state(AppState.THINKING)
 
     async def handle_audio_chunk(self, data: bytes) -> None:
         session = self._require_session()
         await session.send_audio(data)
         self._turn_has_audio = True
+        self._turn_audio_chunks += 1
 
     async def handle_interrupt(self) -> None:
         session = self._session
@@ -221,6 +229,10 @@ class RealtimeRuntime:
 
     async def _handle_session_event(self, event: Any) -> None:
         if self._should_clear_playback(event):
+            await self._ws.send_json(msg_clear_playback())
+        # audio_interrupted means the server truncated assistant output
+        # due to user speech -- clear client-side playback buffer
+        if getattr(event, "type", None) == "audio_interrupted":
             await self._ws.send_json(msg_clear_playback())
         self._dispatcher.handle_event(event)
 
