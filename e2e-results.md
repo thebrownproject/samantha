@@ -11,6 +11,7 @@
 ## Commands Run
 
 ```bash
+cd backend && .venv/bin/python -m pytest -q tests/test_mock_client.py tests/test_e2e.py
 cd backend && .venv/bin/python -m pytest -q -m e2e
 cd backend && .venv/bin/samantha
 cd backend && .venv/bin/python - <<'PY'
@@ -44,13 +45,16 @@ PY
    - `inject_context`
    - `get_state`
    - `stop_listening`
-8. Graceful shutdown via interrupt signal
-9. App-level e2e feasibility check (blocked)
+8. Backend app-tool RPC roundtrip with the mock websocket harness
+9. Graceful shutdown via interrupt signal
+10. App-level e2e feasibility check (blocked)
 
 ## Pass / Fail Results
 
 - `pytest -q -m e2e`: pass
-  - Result: `3 passed, 277 deselected in 17.82s`
+  - Result: `3 passed, 301 deselected in 18.39s`
+- `pytest -q tests/test_mock_client.py tests/test_e2e.py`: pass
+  - Result: `19 passed in 33.99s`
 - Live realtime-session smoke: pass
   - `test_realtime_session_smoke` sent a text turn through `RealtimeRunner` and verified assistant transcript content plus streamed audio
 - Backend runtime startup: pass
@@ -58,6 +62,9 @@ PY
 - Live websocket smoke against runtime server: pass
   - `start_listening` succeeded only after the realtime session connected
   - `inject_context`, `get_state`, and `stop_listening` completed cleanly
+- Backend app-tool RPC roundtrip: pass
+  - mock websocket harness answered `frontmost_app_context` and `capture_display`
+  - websocket server roundtripped both requests over a live connection
 - App boot / UI / audio / hotkey / full end-to-end macOS flow: not executable in this repo/environment
 
 ## Failures and Root Causes
@@ -83,6 +90,7 @@ PY
 - Added websocket-to-realtime bridging for control messages, transcripts, audio, interruptions, and approval requests.
 - Added websocket approval commands (`approve_tool_call`, `reject_tool_call`) and backend approval logging.
 - Added live realtime e2e coverage for a text turn through the realtime session.
+- Added backend mock-client support for canned `app_tool_call` responses and a websocket integration test for the visual-context RPC path.
 
 ## Residual Issues
 

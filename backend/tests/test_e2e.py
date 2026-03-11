@@ -17,6 +17,7 @@ from samantha.agents import create_voice_agent
 from samantha.config import Config
 from samantha.events import AppState, EventDispatcher
 from samantha.memory import MemoryStore
+from samantha.mock_client import default_visual_context_app_tool_results, receive_messages
 from samantha.protocol import protocol_message
 from samantha.session_manager import SessionManager
 from samantha.tools import configure_memory, configure_tools, register_tools
@@ -199,8 +200,50 @@ async def test_tools_register_all(tmp_path):
     cfg = Config(data_dir=tmp_path, safe_mode=False)
     tools = register_tools(cfg)
     tool_names = {t.name for t in tools}
-    expected = {"safe_bash", "file_read", "file_write", "reason_deeply", "web_search", "memory_save", "memory_search", "daily_log_append", "daily_log_search"}
+    expected = {
+        "safe_bash",
+        "file_read",
+        "file_write",
+        "reason_deeply",
+        "web_search",
+        "frontmost_app_context",
+        "capture_display",
+        "memory_save",
+        "memory_search",
+        "daily_log_append",
+        "daily_log_search",
+    }
     assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
+
+
+async def test_app_tool_roundtrip_with_mock_client(tmp_path):
+    """Test backend->client app-tool RPC using the mock websocket harness."""
+    cfg = Config(data_dir=tmp_path, ws_port=9197)
+    ws = await start_server(cfg)
+    host, port = ws.address
+
+    async with connect(f"ws://{host}:{port}") as client:
+        frontmost_task = asyncio.create_task(ws.call_app_tool("frontmost_app_context"))
+        capture_task = asyncio.create_task(ws.call_app_tool("capture_display"))
+
+        summary = await receive_messages(
+            client,
+            idle_timeout=0.05,
+            app_tool_results=default_visual_context_app_tool_results(),
+            verbose=False,
+        )
+
+        frontmost = await asyncio.wait_for(frontmost_task, timeout=1.0)
+        capture = await asyncio.wait_for(capture_task, timeout=1.0)
+
+    await ws.stop()
+
+    assert summary.app_tool_calls == ["frontmost_app_context", "capture_display"]
+    assert summary.app_tool_results_sent == ["frontmost_app_context", "capture_display"]
+    assert frontmost["app_name"] == "Safari"
+    assert frontmost["current_url"] == "https://platform.openai.com/docs"
+    assert capture["mime_type"] == "image/png"
+    assert "image_base64" in capture
 
 
 # -- Online integration tests (need OPENAI_API_KEY) --

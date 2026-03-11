@@ -6,13 +6,13 @@ Release readiness is not yet achieved.
 
 Evidence-backed summary as of this audit:
 
-- Backend quality gates remain strong after remediation: `ruff check samantha tests` passed and the full backend pytest suite now passes with `280 passed`.
+- Backend quality gates remain strong after remediation: `ruff check samantha tests` passed and the full backend pytest suite now passes with `304 passed`.
 - Backend runtime startup, lazy realtime-session boot, websocket smoke, API-backed e2e checks, and a live realtime-session smoke test work on this Linux/WSL environment.
 - Beads completion status still overstates implementation maturity. The current Beads snapshot has 50 closed items, of which 33 are verified complete, 16 are only partially complete, and 1 is implemented differently than specified.
 - The largest release blockers are architectural, not test failures:
   - no checked-in Swift project/workspace or Swift tests
-  - missing Swift websocket client / backend supervision / full IPC bridge
-  - packaging/release documentation and bundling work still absent
+  - missing verified macOS runtime/build path for the new Swift websocket/context bridge
+  - backend subprocess supervision / release packaging work still absent
 
 Safe fixes applied during the audit:
 
@@ -34,7 +34,7 @@ Safe fixes applied during the audit:
 - Confirmed there is no visible Xcode project, Swift package manifest, or Swift test target in the checked-in tree.
 - Confirmed backend e2e-style coverage currently lives in `backend/tests/test_e2e.py`.
 - Confirmed `.env` exists with `OPENAI_API_KEY` configured, value redacted from this report.
-- Observed repo drift against docs: documented Swift files such as `WebSocketClient.swift` and `BackendManager.swift` are not present in `app/`.
+- Observed repo drift against docs: `BackendManager.swift` and checked-in app project metadata are still documented, but not present in the repo.
 - Observed a dirty worktree with many untracked environment and Beads/Dolt artifacts; audit will avoid touching unrelated files.
 
 ### 2026-03-11 - Phase 2: Beads audit
@@ -120,12 +120,29 @@ Safe fixes applied during the audit:
   - full backend suite: `280 passed in 161.86s`
   - API-backed e2e slice: `3 passed, 277 deselected in 17.82s`
 
+### 2026-03-11 - Visual-context and IPC follow-up
+
+- Added backend app-tool RPC for macOS-native context and display capture.
+- Added `frontmost_app_context` and `capture_display` to the backend tool registry.
+- Added Swift source for `WebSocketClient.swift` and `DesktopContextToolExecutor.swift`.
+- Added a backend mock-client path that can auto-answer `app_tool_call` with canned visual-context fixtures for backend-side integration testing.
+- Re-ran backend lint and tests after the visual-context changes:
+  - `cd backend && ./.venv/bin/ruff check samantha tests`
+  - `cd backend && ./.venv/bin/python -m pytest -q tests/test_mock_client.py tests/test_e2e.py`
+  - `cd backend && ./.venv/bin/python -m pytest -q`
+  - `cd backend && ./.venv/bin/python -m pytest -q -m e2e`
+- Latest results after the visual-context pass:
+  - focused mock/e2e slice: `19 passed`
+  - full backend suite: `304 passed in 165.99s`
+  - API-backed e2e slice: `3 passed, 301 deselected in 18.39s`
+
 ## Current System Overview
 
 The repository currently contains two primary code areas:
 
 - `backend/`: Python package implementing configuration, tools, local memory, websocket IPC server, session/event helpers, MCP integration, and pytest coverage.
 - `app/`: Swift source files for the orb window, audio manager, hotkeys, settings, transcript overlay, and keychain integration.
+- `app/`: Swift source files for the orb window, audio manager, websocket client, desktop-context executor, hotkeys, settings, transcript overlay, and keychain integration.
 
 Confirmed implementation shape:
 
@@ -138,7 +155,7 @@ Confirmed implementation shape:
 
 Confirmed repo/documentation drift:
 
-- Architecture docs still describe `WebSocketClient.swift`, `BackendManager.swift`, and an Xcode project structure, but those artifacts are not present in the checked-in tree.
+- The repo still lacks a checked-in buildable Xcode project/workspace despite the documented Swift app structure.
 - There is no checked-in CI configuration under `.github/`.
 
 ## How To Run / Build / Test
@@ -180,7 +197,7 @@ Results:
 
 - Backend bootstrap: pass
 - Backend lint: pass
-- Backend full test suite: pass (`280 passed`)
+- Backend full test suite: pass (`304 passed`)
 - Backend test collection after mark registration: pass, no `e2e` mark warnings
 - Swift build/test: blocked by missing toolchain in environment and missing checked-in app project metadata
 
@@ -201,7 +218,7 @@ Commands run:
 
 Results:
 
-- API-backed backend smoke tests: pass (`3 passed, 277 deselected`)
+- API-backed backend smoke tests: pass (`3 passed, 301 deselected`)
 - Backend runtime boot: pass
 - Live realtime-session websocket smoke: pass
 - App boot / UI / audio / full macOS workflow: blocked
@@ -230,6 +247,12 @@ Blocking reasons for app-level e2e:
   - Updated the default realtime model to `gpt-realtime` and expanded allowed voice names.
 - `backend/samantha/tools.py`
   - Added delegation token, cost, and failure telemetry for `reason_deeply`.
+- `backend/samantha/mock_client.py`
+  - Added canned app-tool responses for `frontmost_app_context` and `capture_display` so backend-only integration testing can cover the new RPC path.
+- `app/Samantha/WebSocketClient.swift`
+  - Added Swift-side websocket client and app-tool RPC handling in source.
+- `app/Samantha/DesktopContextToolExecutor.swift`
+  - Added best-effort frontmost-app context lookup and full-display capture in source.
 
 ## Remaining Risks
 
@@ -237,6 +260,7 @@ Blocking reasons for app-level e2e:
 - The Swift app cannot be built from the checked-in repo state.
 - MCP integration was only unit-tested under mocked macOS gating in this audit environment.
 - The backend approval flow now exists, but the Swift-side UX for approval prompts is still absent because the app-side websocket client and UI are not implemented in this repo state.
+- The Swift websocket/context bridge now exists in source, but it is still uncompiled and unverified because there is no checked-in project/workspace or macOS toolchain in this environment.
 - App-level end-to-end audio playback and playback-tracker precision remain unverified until the macOS client exists.
 - Packaging, release checklist, observability playbook, and subprocess supervision are still absent.
 

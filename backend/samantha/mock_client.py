@@ -17,6 +17,23 @@ DEFAULT_WS_URL = "ws://127.0.0.1:9090"
 DEFAULT_AUDIO_CHUNK_SIZE = 1920
 DEFAULT_AUDIO_CHUNK_DELAY_MS = 20
 DEFAULT_IDLE_TIMEOUT = 1.5
+DEFAULT_CAPTURE_DISPLAY_RESULT = {
+    "display_id": 1,
+    "width": 2,
+    "height": 2,
+    "mime_type": "image/png",
+    "image_base64": (
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8"
+        "/5+hHgMDAwMDEwMAAAU7AQob7tqRAAAAAElFTkSuQmCC"
+    ),
+}
+DEFAULT_FRONTMOST_APP_CONTEXT_RESULT = {
+    "app_name": "Safari",
+    "bundle_id": "com.apple.Safari",
+    "process_id": 1234,
+    "window_title": "OpenAI Docs",
+    "current_url": "https://platform.openai.com/docs",
+}
 
 
 @dataclass(slots=True)
@@ -26,6 +43,8 @@ class HarnessSummary:
     audio_bytes: int = 0
     auto_approved: list[str] = field(default_factory=list)
     auto_rejected: list[str] = field(default_factory=list)
+    app_tool_calls: list[str] = field(default_factory=list)
+    app_tool_results_sent: list[str] = field(default_factory=list)
 
 
 def encode_control_message(msg_type: str, /, **payload: Any) -> str:
@@ -36,6 +55,13 @@ def chunk_audio_bytes(data: bytes, chunk_size: int) -> list[bytes]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     return [data[index:index + chunk_size] for index in range(0, len(data), chunk_size)]
+
+
+def default_visual_context_app_tool_results() -> dict[str, dict[str, Any]]:
+    return {
+        "frontmost_app_context": dict(DEFAULT_FRONTMOST_APP_CONTEXT_RESULT),
+        "capture_display": dict(DEFAULT_CAPTURE_DISPLAY_RESULT),
+    }
 
 
 async def send_audio_file(
@@ -61,6 +87,7 @@ async def receive_messages(
     idle_timeout: float = DEFAULT_IDLE_TIMEOUT,
     auto_approve: bool = False,
     auto_reject: bool = False,
+    app_tool_results: dict[str, dict[str, Any]] | None = None,
     verbose: bool = True,
 ) -> HarnessSummary:
     summary = HarnessSummary()
@@ -82,6 +109,43 @@ async def receive_messages(
         summary.json_messages.append(payload)
         if verbose:
             print(f"[json] {json.dumps(payload, sort_keys=True)}")
+
+        if payload.get("type") == "app_tool_call":
+            request_id = payload.get("request_id")
+            tool = payload.get("tool")
+            if isinstance(tool, str) and tool:
+                summary.app_tool_calls.append(tool)
+            if (
+                isinstance(request_id, str)
+                and request_id
+                and isinstance(tool, str)
+                and tool
+                and app_tool_results is not None
+            ):
+                if tool in app_tool_results:
+                    await ws.send(
+                        encode_control_message(
+                            "app_tool_result",
+                            request_id=request_id,
+                            ok=True,
+                            result=dict(app_tool_results[tool]),
+                        )
+                    )
+                    summary.app_tool_results_sent.append(tool)
+                    if verbose:
+                        print(f"[app-tool-result] {tool}")
+                else:
+                    await ws.send(
+                        encode_control_message(
+                            "app_tool_result",
+                            request_id=request_id,
+                            ok=False,
+                            error=f"Unsupported mock app tool: {tool}",
+                        )
+                    )
+                    if verbose:
+                        print(f"[app-tool-error] {tool}")
+            continue
 
         if payload.get("type") != "tool_approval_required":
             continue
@@ -116,6 +180,7 @@ async def run_mock_session(
     reject_call_id: str | None = None,
     auto_approve: bool = False,
     auto_reject: bool = False,
+    app_tool_results: dict[str, dict[str, Any]] | None = None,
     idle_timeout: float = DEFAULT_IDLE_TIMEOUT,
     audio_chunk_size: int = DEFAULT_AUDIO_CHUNK_SIZE,
     audio_chunk_delay_ms: int = DEFAULT_AUDIO_CHUNK_DELAY_MS,
@@ -147,6 +212,7 @@ async def run_mock_session(
             idle_timeout=idle_timeout,
             auto_approve=auto_approve,
             auto_reject=auto_reject,
+            app_tool_results=app_tool_results,
             verbose=verbose,
         )
 
@@ -167,6 +233,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reject-call-id", help="Send a manual reject_tool_call")
     parser.add_argument("--auto-approve", action="store_true", help="Auto-approve any tool_approval_required events")
     parser.add_argument("--auto-reject", action="store_true", help="Auto-reject any tool_approval_required events")
+    parser.add_argument(
+        "--auto-visual-context-tools",
+        action="store_true",
+        help="Auto-answer frontmost_app_context and capture_display app-tool calls with canned results",
+    )
     parser.add_argument("--idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT, help="Seconds to wait after the last received message")
     parser.add_argument("--quiet", action="store_true", help="Suppress per-message output and print only the summary")
     return parser
@@ -191,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             reject_call_id=args.reject_call_id,
             auto_approve=args.auto_approve,
             auto_reject=args.auto_reject,
+            app_tool_results=default_visual_context_app_tool_results() if args.auto_visual_context_tools else None,
             idle_timeout=args.idle_timeout,
             audio_chunk_size=args.audio_chunk_size,
             audio_chunk_delay_ms=args.audio_chunk_delay_ms,
@@ -206,6 +278,8 @@ def main(argv: list[str] | None = None) -> int:
                 "audio_bytes": summary.audio_bytes,
                 "auto_approved": summary.auto_approved,
                 "auto_rejected": summary.auto_rejected,
+                "app_tool_calls": summary.app_tool_calls,
+                "app_tool_results_sent": summary.app_tool_results_sent,
             },
             sort_keys=True,
         )

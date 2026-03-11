@@ -89,7 +89,7 @@ Build in this order. Phase 1 is fully testable without Swift.
 3. `HotkeyManager.swift` - Option+S toggle
 4. `AudioManager.swift` - Mic capture (24kHz PCM16 mono) + playback
 5. `WebSocketClient.swift` - Connect to Python backend
-6. `BackendManager.swift` - Launch Python as subprocess
+6. Backend process launch and supervision path
 7. Wire: hotkey -> capture -> WebSocket -> playback
 8. `SettingsView.swift` - API key, voice, preferences
 9. `TranscriptOverlay.swift` - Optional live transcript following `docs/frontend-handoff.md`
@@ -143,6 +143,7 @@ Swift -> Python:
 {"protocol_version": 1, "type": "inject_context", "text": "..."}
 {"protocol_version": 1, "type": "approve_tool_call", "call_id": "call_123", "always": false}
 {"protocol_version": 1, "type": "reject_tool_call", "call_id": "call_123", "always": false}
+{"protocol_version": 1, "type": "app_tool_result", "request_id": "req_123", "ok": true, "result": {"app_name": "Safari"}}
 ```
 
 Python -> Swift:
@@ -154,6 +155,7 @@ Python -> Swift:
 {"protocol_version": 1, "type": "tool_approval_required", "name": "file_write", "call_id": "call_123", "args": {"path": "..."}}
 {"protocol_version": 1, "type": "clear_playback"}
 {"protocol_version": 1, "type": "error", "message": "..."}
+{"protocol_version": 1, "type": "app_tool_call", "request_id": "req_123", "tool": "frontmost_app_context", "args": {}}
 ```
 
 ## Data Storage

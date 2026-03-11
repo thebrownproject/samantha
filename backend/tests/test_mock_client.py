@@ -10,6 +10,7 @@ import pytest
 
 from samantha.mock_client import (
     chunk_audio_bytes,
+    default_visual_context_app_tool_results,
     encode_control_message,
     receive_messages,
     send_audio_file,
@@ -116,3 +117,40 @@ async def test_receive_messages_collects_audio_and_auto_rejects():
         "call_id": "call_456",
         "always": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_receive_messages_answers_app_tool_calls():
+    request = json.dumps(
+        {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "type": "app_tool_call",
+            "request_id": "req_123",
+            "tool": "frontmost_app_context",
+            "args": {},
+        }
+    )
+    ws = FakeWebSocket(incoming=[request])
+
+    summary = await receive_messages(
+        ws,
+        idle_timeout=0.01,
+        app_tool_results=default_visual_context_app_tool_results(),
+        verbose=False,
+    )
+
+    assert summary.app_tool_calls == ["frontmost_app_context"]
+    assert summary.app_tool_results_sent == ["frontmost_app_context"]
+    response_payload = json.loads(ws.sent[0])
+    assert response_payload["protocol_version"] == IPC_PROTOCOL_VERSION
+    assert response_payload["type"] == "app_tool_result"
+    assert response_payload["request_id"] == "req_123"
+    assert response_payload["ok"] is True
+    assert response_payload["result"]["app_name"] == "Safari"
+
+
+def test_default_visual_context_app_tool_results_contains_expected_tools():
+    fixtures = default_visual_context_app_tool_results()
+    assert set(fixtures) == {"frontmost_app_context", "capture_display"}
+    assert fixtures["frontmost_app_context"]["app_name"] == "Safari"
+    assert fixtures["capture_display"]["mime_type"] == "image/png"

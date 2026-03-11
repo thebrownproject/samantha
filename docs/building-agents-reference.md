@@ -135,9 +135,10 @@ Before the macOS app is available, use the backend mock client harness to exerci
 cd backend && .venv/bin/python -m samantha.mock_client --get-state
 cd backend && .venv/bin/python -m samantha.mock_client --start-listening --audio-file /path/to/sample.pcm --stop-listening
 cd backend && .venv/bin/python -m samantha.mock_client --auto-approve --idle-timeout 5
+cd backend && .venv/bin/python -m samantha.mock_client --auto-visual-context-tools --idle-timeout 2
 ```
 
-The harness speaks protocol version `1`, prints JSON/audio events, and can auto-approve or auto-reject tool approval prompts.
+The harness speaks protocol version `1`, prints JSON/audio events, can auto-approve or auto-reject tool approval prompts, and can answer `frontmost_app_context` / `capture_display` app-tool requests with canned visual-context fixtures.
 
 ## 12) First macOS Visual Context Phase
 
