@@ -39,13 +39,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         webSocketClient.appToolExecutor = desktopContextToolExecutor
         webSocketClient.connect()
 
+        // Watch for voice changes in Settings
+        UserDefaults.standard.addObserver(self, forKeyPath: "selectedVoice", options: [.new], context: nil)
+
         Task {
             let granted = await audioManager.requestPermission()
             consoleState.log("Mic permission: \(granted ? "granted" : "denied")",
                             level: granted ? .info : .warning)
         }
 
+        if KeychainHelper.loadAPIKey() != nil {
+            consoleState.log("API key: configured in Keychain")
+        } else {
+            consoleState.log("API key: not set (set OPENAI_API_KEY env for backend)", level: .warning)
+        }
+
         consoleState.log("App launched")
+    }
+
+    override func observeValue(
+        forKeyPath keyPath: String?,
+        of object: Any?,
+        change: [NSKeyValueChangeKey: Any]?,
+        context: UnsafeMutableRawPointer?
+    ) {
+        if keyPath == "selectedVoice", let voice = change?[.newKey] as? String {
+            Task { @MainActor in
+                guard webSocketClient.connectionState == .connected else { return }
+                try? await webSocketClient.setVoice(voice)
+                consoleState.log("Voice changed to: \(voice)")
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -53,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        UserDefaults.standard.removeObserver(self, forKeyPath: "selectedVoice")
         webSocketClient.disconnect()
         audioManager.stopCapture()
     }
@@ -180,11 +205,20 @@ extension AppDelegate: WebSocketClientDelegate {
         consoleState.connectionState = state
         consoleState.log("WebSocket: \(state)")
 
-        if state == .disconnected && consoleState.appState != .idle {
-            audioManager.stopCapture()
-            consoleState.isCapturing = false
-            consoleState.isPlaying = false
-            consoleState.appState = .error
+        switch state {
+        case .connected:
+            let voice = UserDefaults.standard.string(forKey: "selectedVoice") ?? "ash"
+            Task { try? await webSocketClient.setVoice(voice) }
+            consoleState.log("Synced voice: \(voice)", level: .debug)
+        case .disconnected:
+            if consoleState.appState != .idle {
+                audioManager.stopCapture()
+                consoleState.isCapturing = false
+                consoleState.isPlaying = false
+                consoleState.appState = .error
+            }
+        case .connecting:
+            break
         }
     }
 
