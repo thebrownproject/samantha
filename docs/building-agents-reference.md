@@ -49,7 +49,19 @@ realtime_config = {
 - `conversation.item.input_audio_transcription.delta/completed` -> user transcript updates
 - `error` -> state: `error`
 
-## 5) Interruption Flows
+## 5) Presence Widget Rules
+
+The app should render a floating presence widget rather than a generic orb. The detailed visual system lives in `docs/design-direction.md`.
+
+Implementation rules:
+
+- Use one continuous loop-like shape as the core widget
+- Drive motion from state plus smoothed audio energy, not a raw waveform
+- Keep the silhouette recognizable across `idle`, `listening`, `thinking`, `speaking`, and `error`
+- Interruptions should visibly snap the widget back to listening immediately
+- Transcript UI is secondary to the presence widget
+
+## 6) Interruption Flows
 
 ### Automatic barge-in
 1. User speaks while assistant is speaking.
@@ -70,7 +82,7 @@ realtime_config = {
 2. Swift responds with `{"type":"approve_tool_call","call_id":"..."}` or `{"type":"reject_tool_call","call_id":"..."}`.
 3. Backend resumes or rejects the pending tool call and logs the decision.
 
-## 6) Delegation Tool Pattern
+## 7) Delegation Tool Pattern
 
 Use this when the active realtime agent needs deeper reasoning.
 
@@ -86,7 +98,7 @@ Guidelines:
 - Include enough structure for follow-up actions.
 - Log delegation start/end via IPC `tool_start`/`tool_end` events.
 
-## 7) Safety Baseline (Phase 1)
+## 8) Safety Baseline (Phase 1)
 
 - Safe mode defaults ON for development.
 - Validate every file path before file tool operations.
@@ -94,7 +106,7 @@ Guidelines:
 - Require confirmation for destructive operations.
 - Fail fast with specific error messages.
 
-## 8) Build Checklist
+## 9) Build Checklist
 
 - [ ] Realtime session starts and streams audio both directions.
 - [ ] `interrupt_response` works and local playback stops instantly.
@@ -103,16 +115,18 @@ Guidelines:
 - [ ] Safe mode blocks disallowed shell/file actions.
 - [ ] Memory save/search tools pass tests.
 - [ ] State machine transitions are deterministic under interruptions.
+- [ ] Presence widget motion matches the design direction and does not degrade into a waveform/equalizer look.
 
-## 9) Recommended Test Cases
+## 10) Recommended Test Cases
 
 1. User interrupts assistant mid-sentence with speech.
 2. User interrupts assistant with manual stop button.
 3. User injects extra text context while tool call is running.
 4. Delegation tool returns late while user starts a new turn.
 5. Backend reconnect after temporary websocket failure.
+6. Widget visibly snaps from `speaking` to `listening` on interruption.
 
-## 10) Sources to Keep Handy
+## 11) Sources to Keep Handy
 
 - Realtime API reference: `https://developers.openai.com/api/reference/resources/realtime`
 - Agents Python realtime guide: `https://github.com/openai/openai-agents-python/blob/main/docs/realtime/guide.md`

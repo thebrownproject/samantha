@@ -1,15 +1,16 @@
 # Samantha
 
-A voice-first AI companion for macOS. Floating orb interface with natural speech, full computer access, and persistent memory. Built with OpenAI Agents SDK (Python) and Swift.
+A voice-first AI companion for macOS. Floating presence widget with natural speech, full computer access, and persistent memory. Built with OpenAI Agents SDK (Python) and Swift.
 
 ## Architecture
 
 Read `docs/architecture.md` for the full technical design.  
 Read `docs/spec.md` for the product specification.  
+Read `docs/design-direction.md` for the visual and motion direction.  
 Read `docs/building-agents-reference.md` for implementation details used while building.
 
 ```
-Swift app (floating orb, audio I/O, hotkey)
+Swift app (floating presence widget, audio I/O, hotkey)
     |  WebSocket (localhost:9090)
     |  - Binary frames: PCM16 audio
     |  - Text frames: JSON control messages
@@ -30,6 +31,7 @@ Samantha/
 ├── docs/
 │   ├── spec.md                         # Product specification
 │   ├── architecture.md                 # Technical architecture
+│   ├── design-direction.md             # Visual and motion direction
 │   └── building-agents-reference.md    # Build-time implementation reference
 ├── backend/                            # Python
 │   ├── pyproject.toml
@@ -79,7 +81,7 @@ Build in this order. Phase 1 is fully testable without Swift.
 
 ### Phase 2: Swift App
 1. Xcode project, LSUIElement, SwiftUI
-2. `OrbWindow.swift` + `OrbView.swift`
+2. `OrbWindow.swift` + `OrbView.swift` - implement the presence widget from `docs/design-direction.md`
 3. `HotkeyManager.swift` - Option+S toggle
 4. `AudioManager.swift` - Mic capture (24kHz PCM16 mono) + playback
 5. `WebSocketClient.swift` - Connect to Python backend

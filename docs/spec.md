@@ -2,19 +2,26 @@
 
 ## Vision
 
-A native macOS AI companion with a voice-first interface. A floating orb that lives on your desktop, listens when activated, speaks back naturally, and has full access to your computer. Persistent memory means it knows who you are, what you're working on, and how you like things done.
+A native macOS AI companion with a voice-first interface. A floating presence widget lives on your desktop, listens when activated, speaks back naturally, and has full access to your computer. Persistent memory means it knows who you are, what you're working on, and how you like things done.
 
 Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 
 ## Core Experience
 
-1. A translucent floating orb sits on your desktop (always on top, draggable)
-2. Press a hotkey (e.g., Option+S) or click the orb to activate
+1. A translucent floating presence widget sits on your desktop (always on top, draggable)
+2. Press a hotkey (e.g., Option+S) or click the widget to activate
 3. Speak naturally: "Hey, what meetings do I have tomorrow?"
 4. Samantha responds conversationally with near-instant audio
 5. She checks your calendar via AppleScript, reads back the results
 6. You can interrupt her mid-sentence (barge-in) and she adapts
-7. When idle, the orb pulses gently. When listening, it glows. When speaking, it animates.
+7. When idle, the widget breathes gently. When listening, it becomes more attentive. When speaking, it deforms and moves like a living object rather than a generic audio visualizer.
+
+## Visual Language and Presence
+
+- The primary UI is a floating presence widget, not a generic orb.
+- The visual direction is a warm orange continuous loop that feels alive and attentive.
+- Motion should be driven by state and smoothed speech energy, not by a raw waveform visualizer.
+- The detailed visual system, state behavior, and motion rules live in `docs/design-direction.md`.
 
 ## Core Capabilities
 
@@ -73,6 +80,7 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - No screen/camera vision (future)
 - No always-listening wake word (future, start with hotkey activation)
 - No third-party integrations beyond AppleScript and bash
+- No generic chat-window-first experience as the primary interface
 
 ## Settings
 
@@ -83,7 +91,7 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - Safe mode toggle (restricts bash to allowlist)
 - Confirmation prompts for destructive actions (on/off)
 - Memory on/off
-- Orb position, size, opacity
+- Widget position, size, opacity
 
 ## Privacy
 

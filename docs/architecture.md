@@ -7,17 +7,18 @@
 |  Swift macOS App (Samantha.app)                          |
 |                                                          |
 |  +------------------+  +-----------------------------+   |
-|  | Floating Orb UI  |  | Audio I/O                   |   |
-|  | (NSPanel,        |  | - AVAudioEngine capture     |   |
-|  |  SwiftUI overlay)|  | - 24kHz PCM16 mono          |   |
-|  +------------------+  | - Audio playback             |   |
-|                        | - Local barge-in detection   |   |
-|  +------------------+  +-----------------------------+   |
-|  | Hotkey Manager   |                                    |
-|  | (Option+S)       |  +-----------------------------+   |
-|  +------------------+  | Settings UI                 |   |
-|                        | (SwiftUI sheet)             |   |
-|  +------------------+  +-----------------------------+   |
+|  | Floating Presence|  | Audio I/O                   |   |
+|  | Widget UI        |  | - AVAudioEngine capture     |   |
+|  | (NSPanel,        |  | - 24kHz PCM16 mono          |   |
+|  |  SwiftUI overlay)|  | - Audio playback            |   |
+|  +------------------+  | - Local barge-in detection   |   |
+|                        +-----------------------------+   |
+|  +------------------+                                    |
+|  | Hotkey Manager   |  +-----------------------------+   |
+|  | (Option+S)       |  | Settings UI                 |   |
+|  +------------------+  | (SwiftUI sheet)             |   |
+|                        +-----------------------------+   |
+|  +------------------+                                    |
 |  | IPC Client       |                                    |
 |  | (WebSocket to    |                                    |
 |  |  Python backend) |                                    |
@@ -90,17 +91,26 @@
 **Target:** macOS 14+  
 **Distribution:** DMG or Homebrew cask
 
-#### Floating Orb
+#### Floating Presence Widget
 - `NSPanel` with `.nonactivating` style
 - `level: .floating` (always on top)
 - Transparent background, SwiftUI overlay
 - Draggable (save position to UserDefaults)
+- Visual and motion behavior should follow `docs/design-direction.md`
+- Primary shape is a continuous warm-orange loop rather than a generic orb
 - States:
   - Idle
   - Listening
   - Thinking
   - Speaking
   - Error
+
+Widget behavior rules:
+
+- Motion is driven by app state plus smoothed speech energy
+- The widget should not render as a literal waveform or equalizer
+- Interruptions should cause an immediate visible state change
+- The silhouette should remain recognizable in every state
 
 #### Audio pipeline
 - AVAudioEngine for mic capture and playback
@@ -225,7 +235,7 @@ Python -> Swift:
 
 ### Phase 2: Swift app
 1. Create app shell (LSUIElement + SwiftUI).
-2. Build orb window/view states.
+2. Build widget window/view states based on `docs/design-direction.md`.
 3. Add hotkey manager.
 4. Implement capture/playback audio path.
 5. Add WebSocket client and backend lifecycle manager.
