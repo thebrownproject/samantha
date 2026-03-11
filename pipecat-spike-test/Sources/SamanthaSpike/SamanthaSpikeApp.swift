@@ -10,8 +10,7 @@ struct SamanthaSpikeApp: App {
             DevConsoleView(state: appDelegate.consoleState, actions: appDelegate.consoleActions)
         }
         Settings {
-            Text("Settings placeholder")
-                .frame(width: 300, height: 200)
+            SettingsView()
         }
     }
 }
