@@ -1,6 +1,7 @@
 """Tests for tools module -- bash, file_read, file_write, reason_deeply, web_search."""
 
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -283,9 +284,12 @@ async def test_web_search_returns_results():
         result = await _web_search("test query")
     _tools_mod._openai_client = None  # clean up
 
-    assert "Here are results." in result
-    assert "Example" in result
-    assert "https://example.com" in result
+    payload = json.loads(result)
+    assert payload == {
+        "query": "test query",
+        "results": [{"title": "Example", "url": "https://example.com"}],
+        "summary": "Here are results.",
+    }
 
 
 async def test_web_search_handles_empty_results():
@@ -300,7 +304,12 @@ async def test_web_search_handles_empty_results():
         result = await _web_search("obscure query xyz")
     _tools_mod._openai_client = None
 
-    assert "No results found" in result
+    payload = json.loads(result)
+    assert payload == {
+        "query": "obscure query xyz",
+        "results": [],
+        "summary": "",
+    }
 
 
 async def test_web_search_handles_api_error():
@@ -313,7 +322,13 @@ async def test_web_search_handles_api_error():
         result = await _web_search("fail query")
     _tools_mod._openai_client = None
 
-    assert "Error in web_search" in result
+    payload = json.loads(result)
+    assert payload == {
+        "error": "API error",
+        "query": "fail query",
+        "results": [],
+        "summary": "",
+    }
 
 
 # -- format_tool_error --

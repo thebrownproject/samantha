@@ -52,6 +52,7 @@ realtime_config = {
 ## 5) Presence Widget Rules
 
 The app should render a floating presence widget rather than a generic orb. The detailed visual system lives in `docs/design-direction.md`.
+The exact websocket-event to widget-state mapping lives in `docs/frontend-handoff.md`.
 
 Implementation rules:
 
@@ -126,10 +127,64 @@ Guidelines:
 5. Backend reconnect after temporary websocket failure.
 6. Widget visibly snaps from `speaking` to `listening` on interruption.
 
-## 11) Sources to Keep Handy
+## 11) Mock Client Harness
 
-- Realtime API reference: `https://developers.openai.com/api/reference/resources/realtime`
-- Agents Python realtime guide: `https://github.com/openai/openai-agents-python/blob/main/docs/realtime/guide.md`
-- Agents Python realtime quickstart: `https://github.com/openai/openai-agents-python/blob/main/docs/realtime/quickstart.md`
-- Agents Python realtime config: `https://github.com/openai/openai-agents-python/blob/main/src/agents/realtime/config.py`
-- Agents JS voice handoff behavior: `https://github.com/openai/openai-agents-js/blob/main/docs/src/content/docs/guides/voice-agents/build.mdx`
+Before the macOS app is available, use the backend mock client harness to exercise the websocket contract directly:
+
+```bash
+cd backend && .venv/bin/python -m samantha.mock_client --get-state
+cd backend && .venv/bin/python -m samantha.mock_client --start-listening --audio-file /path/to/sample.pcm --stop-listening
+cd backend && .venv/bin/python -m samantha.mock_client --auto-approve --idle-timeout 5
+```
+
+The harness speaks protocol version `1`, prints JSON/audio events, and can auto-approve or auto-reject tool approval prompts.
+
+## 12) Structured Tool and Log Contracts
+
+### `web_search`
+
+`web_search` returns a JSON string with this shape:
+
+```json
+{"query":"...","summary":"...","results":[{"title":"...","url":"https://..."}],"error":"..."}
+```
+
+Rules:
+
+- `query` is always present.
+- `summary` is always present and may be empty.
+- `results` is always present and may be empty.
+- `error` is present only when the search fails.
+- Callers that need structure should `json.loads(...)` the tool result before inspection.
+
+### Daily log entries
+
+The realtime runtime writes structured JSON strings into the daily log so later memory promotion and inspection remain machine-readable.
+
+Conversation turn:
+
+```json
+{"kind":"conversation_turn","role":"user|assistant","text":"...","final":true}
+```
+
+Memory promotion signal:
+
+```json
+{"kind":"memory_promotion_signal","tool":"memory_save","content":"...","tags":"comma,separated"}
+```
+
+### Approval semantics
+
+- Destructive tools can emit `tool_approval_required`.
+- The client must answer with the exact `call_id`.
+- `always=true` maps to a persistent approval preference at the SDK/session layer when supported.
+- The frontend behavior for approval prompts is defined in `docs/frontend-handoff.md`.
+
+## 13) Sources to Keep Handy
+
+- Agents Python realtime guide: `https://openai.github.io/openai-agents-python/realtime/guide/`
+- Agents Python realtime transport: `https://openai.github.io/openai-agents-python/realtime/transport/`
+- Agents Python `RealtimeSession` reference: `https://openai.github.io/openai-agents-python/ref/realtime/session/`
+- Agents Python human-in-the-loop guide: `https://openai.github.io/openai-agents-python/human_in_the_loop/`
+- Realtime client events reference: `https://platform.openai.com/docs/api-reference/realtime-client-events`
+- Realtime VAD guide: `https://platform.openai.com/docs/guides/realtime-vad`

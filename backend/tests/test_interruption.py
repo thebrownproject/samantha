@@ -6,6 +6,7 @@ import pytest
 
 from samantha.events import AppState, EventDispatcher, msg_clear_playback
 from samantha.interruption import InterruptionHandler
+from samantha.protocol import protocol_message
 
 
 def _evt(type: str, **kwargs) -> SimpleNamespace:
@@ -74,7 +75,7 @@ class TestInterruptionHandler:
 # -- msg_clear_playback --
 
 def test_msg_clear_playback():
-    assert msg_clear_playback() == {"type": "clear_playback"}
+    assert msg_clear_playback() == protocol_message("clear_playback")
 
 
 # -- Integration with EventDispatcher --

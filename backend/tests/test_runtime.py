@@ -12,6 +12,7 @@ from agents.realtime import RealtimeModelSendRawMessage
 from samantha.agents import create_voice_agent
 from samantha.config import Config
 from samantha.events import AppState
+from samantha.protocol import protocol_message
 from samantha.runtime import RealtimeRuntime
 
 _STOP = object()
@@ -97,7 +98,7 @@ class FakeWSServer:
 
     async def publish_state(self, state: AppState) -> None:
         self.app_state = state
-        self.json_messages.append({"type": "state_change", "state": str(state)})
+        self.json_messages.append(protocol_message("state_change", state=str(state)))
 
 
 class FakeMemoryStore:
@@ -154,7 +155,7 @@ async def test_runtime_controls_audio_commit_context_and_approvals(cfg):
     assert session.interrupt_calls == 1
     assert session.approved == [("call_1", True)]
     assert session.rejected == [("call_2", False)]
-    assert {"type": "clear_playback"} in ws.json_messages
+    assert protocol_message("clear_playback") in ws.json_messages
 
     raw_messages = [
         event.message
@@ -236,29 +237,20 @@ async def test_runtime_forwards_session_events_to_websocket(cfg):
     await asyncio.sleep(0.1)
 
     assert ws.audio_messages == [b"\xaa\xbb"]
-    assert {"type": "transcript", "role": "user", "text": "hello", "final": True} in ws.json_messages
-    assert {
-        "type": "transcript",
-        "role": "assistant",
-        "text": "hi there",
-        "final": True,
-    } in ws.json_messages
-    assert {
-        "type": "tool_start",
-        "name": "file_write",
-        "args": {"path": "/tmp/test.txt"},
-    } in ws.json_messages
-    assert {
-        "type": "tool_approval_required",
-        "name": "file_write",
-        "call_id": "call_7",
-        "args": {"path": "/tmp/test.txt"},
-    } in ws.json_messages
-    assert {"type": "clear_playback"} in ws.json_messages
-    assert {"type": "tool_end", "name": "file_write", "result": "ok"} in ws.json_messages
-    assert {"type": "error", "message": "boom"} in ws.json_messages
-    assert {"type": "state_change", "state": "speaking"} in ws.json_messages
-    assert {"type": "state_change", "state": "listening"} in ws.json_messages
+    assert protocol_message("transcript", role="user", text="hello", final=True) in ws.json_messages
+    assert protocol_message("transcript", role="assistant", text="hi there", final=True) in ws.json_messages
+    assert protocol_message("tool_start", name="file_write", args={"path": "/tmp/test.txt"}) in ws.json_messages
+    assert protocol_message(
+        "tool_approval_required",
+        name="file_write",
+        call_id="call_7",
+        args={"path": "/tmp/test.txt"},
+    ) in ws.json_messages
+    assert protocol_message("clear_playback") in ws.json_messages
+    assert protocol_message("tool_end", name="file_write", result="ok") in ws.json_messages
+    assert protocol_message("error", message="boom") in ws.json_messages
+    assert protocol_message("state_change", state="speaking") in ws.json_messages
+    assert protocol_message("state_change", state="listening") in ws.json_messages
 
     await runtime.stop()
 
@@ -324,5 +316,22 @@ async def test_runtime_appends_daily_log_entries_for_turns_and_memory_signals(cf
             "text": "I will remember that.",
         },
     ]
+
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_runtime_logs_turn_lifecycle_metrics(cfg, caplog):
+    runtime, _ws, session, _runner = _make_runtime(cfg)
+    caplog.set_level("INFO")
+
+    await runtime.handle_start_listening()
+    await session.push(SimpleNamespace(type="audio", data=b"\xaa\xbb"))
+    await session.push(SimpleNamespace(type="agent_end"))
+    await asyncio.sleep(0.1)
+
+    assert "Turn started session_id=" in caplog.text
+    assert "First audio session_id=" in caplog.text
+    assert "Turn finished session_id=" in caplog.text
 
     await runtime.stop()

@@ -2,6 +2,8 @@
 
 ## System Overview
 
+See `docs/ipc-protocol.md` for the websocket contract, `docs/frontend-handoff.md` for frontend state mapping, and `docs/design-direction.md` for visual behavior.
+
 ```
 +----------------------------------------------------------+
 |  Swift macOS App (Samantha.app)                          |
@@ -97,6 +99,7 @@
 - Transparent background, SwiftUI overlay
 - Draggable (save position to UserDefaults)
 - Visual and motion behavior should follow `docs/design-direction.md`
+- Event/state handling should follow `docs/frontend-handoff.md`
 - Primary shape is a continuous warm-orange loop rather than a generic orb
 - States:
   - Idle
@@ -184,6 +187,8 @@ This tool can be called by the active realtime agent when it needs deeper reason
 
 ## IPC Protocol (Swift <-> Python)
 
+See `docs/ipc-protocol.md` for the versioning policy and the canonical wire contract. See `docs/frontend-handoff.md` for how those messages should drive the widget, transcript overlay, approvals, and playback behavior.
+
 ### Binary frames (audio)
 - Swift -> Python: raw PCM16 audio chunks
 - Python -> Swift: raw PCM16 output chunks
@@ -192,25 +197,51 @@ This tool can be called by the active realtime agent when it needs deeper reason
 
 Swift -> Python:
 ```json
-{"type": "start_listening"}
-{"type": "stop_listening"}
-{"type": "interrupt"}
-{"type": "set_voice", "voice": "alloy"}
-{"type": "inject_context", "text": "..."}
-{"type": "approve_tool_call", "call_id": "call_123", "always": false}
-{"type": "reject_tool_call", "call_id": "call_123", "always": false}
-{"type": "get_state"}
+{"protocol_version": 1, "type": "start_listening"}
+{"protocol_version": 1, "type": "stop_listening"}
+{"protocol_version": 1, "type": "interrupt"}
+{"protocol_version": 1, "type": "set_voice", "voice": "alloy"}
+{"protocol_version": 1, "type": "inject_context", "text": "..."}
+{"protocol_version": 1, "type": "approve_tool_call", "call_id": "call_123", "always": false}
+{"protocol_version": 1, "type": "reject_tool_call", "call_id": "call_123", "always": false}
+{"protocol_version": 1, "type": "get_state"}
 ```
 
 Python -> Swift:
 ```json
-{"type": "state_change", "state": "listening|thinking|speaking|idle|error"}
-{"type": "transcript", "role": "user|assistant", "text": "...", "final": true}
-{"type": "tool_start", "name": "reason_deeply", "args": {"task": "..."}}
-{"type": "tool_end", "name": "reason_deeply", "result": "..."}
-{"type": "tool_approval_required", "name": "file_write", "call_id": "call_123", "args": {"path": "..."}}
-{"type": "clear_playback"}
-{"type": "error", "message": "..."}
+{"protocol_version": 1, "type": "state_change", "state": "listening|thinking|speaking|idle|error"}
+{"protocol_version": 1, "type": "transcript", "role": "user|assistant", "text": "...", "final": true}
+{"protocol_version": 1, "type": "tool_start", "name": "reason_deeply", "args": {"task": "..."}}
+{"protocol_version": 1, "type": "tool_end", "name": "reason_deeply", "result": "..."}
+{"protocol_version": 1, "type": "tool_approval_required", "name": "file_write", "call_id": "call_123", "args": {"path": "..."}}
+{"protocol_version": 1, "type": "clear_playback"}
+{"protocol_version": 1, "type": "error", "message": "..."}
+```
+
+## Structured Backend Payloads
+
+### `web_search` tool output
+
+The backend normalizes `web_search` into a JSON string so downstream code has a stable contract:
+
+```json
+{"query":"OpenAI agents SDK Python","summary":"...","results":[{"title":"...","url":"https://..."}]}
+```
+
+Rules:
+
+- `query` is always present.
+- `summary` is always present and may be an empty string.
+- `results` is always present and may be an empty array.
+- `error` is included only on failure.
+
+### Daily log entries written by the realtime runtime
+
+The runtime appends JSON strings into `daily_logs.entry` for structured replay and promotion:
+
+```json
+{"kind":"conversation_turn","role":"assistant","text":"Hello there.","final":true}
+{"kind":"memory_promotion_signal","tool":"memory_save","content":"Fraser prefers dark mode","tags":"preference,ui"}
 ```
 
 ## Safety model

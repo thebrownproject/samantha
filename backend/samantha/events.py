@@ -8,6 +8,8 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import Any, ClassVar
 
+from samantha.protocol import protocol_message
+
 logger = logging.getLogger(__name__)
 
 _VALID_ROLES = {"user", "assistant"}
@@ -37,23 +39,23 @@ class AppState(StrEnum):
 
 # -- JSON message builders for IPC protocol --
 
-def msg_state_change(state: AppState) -> dict[str, str]:
-    return {"type": "state_change", "state": str(state)}
+def msg_state_change(state: AppState) -> dict[str, Any]:
+    return protocol_message("state_change", state=str(state))
 
 
 def msg_transcript(role: str, text: str, final: bool = False) -> dict[str, Any]:
-    return {"type": "transcript", "role": role, "text": text, "final": final}
+    return protocol_message("transcript", role=role, text=text, final=final)
 
 
 def msg_tool_start(name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
-    msg: dict[str, Any] = {"type": "tool_start", "name": name}
+    msg = protocol_message("tool_start", name=name)
     if args is not None:
         msg["args"] = args
     return msg
 
 
 def msg_tool_end(name: str, result: str | None = None) -> dict[str, Any]:
-    msg: dict[str, Any] = {"type": "tool_end", "name": name}
+    msg = protocol_message("tool_end", name=name)
     if result is not None:
         msg["result"] = result
     return msg
@@ -64,22 +66,18 @@ def msg_tool_approval_required(
     call_id: str,
     args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    msg: dict[str, Any] = {
-        "type": "tool_approval_required",
-        "name": name,
-        "call_id": call_id,
-    }
+    msg = protocol_message("tool_approval_required", name=name, call_id=call_id)
     if args is not None:
         msg["args"] = args
     return msg
 
 
-def msg_clear_playback() -> dict[str, str]:
-    return {"type": "clear_playback"}
+def msg_clear_playback() -> dict[str, Any]:
+    return protocol_message("clear_playback")
 
 
-def msg_error(message: str) -> dict[str, str]:
-    return {"type": "error", "message": message}
+def msg_error(message: str) -> dict[str, Any]:
+    return protocol_message("error", message=message)
 
 
 # -- Event dispatcher --

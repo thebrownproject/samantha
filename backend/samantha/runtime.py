@@ -6,6 +6,8 @@ import asyncio
 import json
 import logging
 import os
+import time
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -46,11 +48,16 @@ class RealtimeRuntime:
         self._require_api_key = require_api_key
 
         self._session: RealtimeSession | None = None
+        self._session_id = uuid.uuid4().hex[:8]
         self._session_ready = asyncio.Event()
         self._ensure_lock = asyncio.Lock()
         self._started = False
         self._last_connect_error: Exception | None = None
         self._turn_has_audio = False
+        self._turn_counter = 0
+        self._active_turn_id: str | None = None
+        self._turn_started_at = 0.0
+        self._first_audio_latency: float | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
 
         self._interruption.wire(self._dispatcher)
@@ -94,7 +101,7 @@ class RealtimeRuntime:
                 self._session = session
                 self._last_connect_error = None
                 self._session_ready.set()
-                logger.info("Realtime session connected")
+                logger.info("Realtime session connected session_id=%s", self._session_id)
 
                 async for event in session:
                     await self._handle_session_event(event)
@@ -110,6 +117,7 @@ class RealtimeRuntime:
 
     async def handle_start_listening(self) -> None:
         await self.wait_until_ready()
+        self._start_turn()
         self._turn_has_audio = False
         self._dispatcher.set_state(AppState.LISTENING)
 
@@ -134,6 +142,12 @@ class RealtimeRuntime:
             return
 
         await session.interrupt()
+        if self._active_turn_id is not None:
+            logger.info(
+                "Turn interrupted session_id=%s turn_id=%s mode=manual",
+                self._session_id,
+                self._active_turn_id,
+            )
         result = self._interruption.handle_manual_interrupt()
         if result.clear_playback:
             await self._ws.send_json(msg_clear_playback())
@@ -196,6 +210,12 @@ class RealtimeRuntime:
         if payload_type != "input_audio_buffer.speech_started":
             return False
 
+        if self._active_turn_id is not None:
+            logger.info(
+                "Turn interrupted session_id=%s turn_id=%s mode=vad",
+                self._session_id,
+                self._active_turn_id,
+            )
         result = self._interruption.handle_speech_started()
         if result.new_state is not None:
             self._dispatcher.set_state(result.new_state)
@@ -214,6 +234,8 @@ class RealtimeRuntime:
         await session.model.send_event(RealtimeModelSendRawMessage(message=payload))
 
     def _on_state_change(self, state: AppState) -> None:
+        if state in {AppState.IDLE, AppState.ERROR}:
+            self._finish_turn("error" if state == AppState.ERROR else "completed")
         self._spawn(self._ws.publish_state(state))
 
     def _on_transcript(self, msg: dict[str, Any]) -> None:
@@ -233,6 +255,7 @@ class RealtimeRuntime:
         self._spawn(self._ws.send_json(msg))
 
     def _on_audio(self, data: bytes) -> None:
+        self._log_first_audio()
         self._spawn(self._ws.send_audio(data))
 
     def _on_error(self, msg: dict[str, str]) -> None:
@@ -306,3 +329,51 @@ class RealtimeRuntime:
             )
         except Exception:
             logger.warning("Failed to append daily log entry", exc_info=True)
+
+    def _start_turn(self) -> None:
+        self._turn_counter += 1
+        self._active_turn_id = f"turn_{self._turn_counter:04d}"
+        self._turn_started_at = time.monotonic()
+        self._first_audio_latency = None
+        logger.info(
+            "Turn started session_id=%s turn_id=%s",
+            self._session_id,
+            self._active_turn_id,
+        )
+
+    def _log_first_audio(self) -> None:
+        if self._active_turn_id is None or self._first_audio_latency is not None:
+            return
+        self._first_audio_latency = time.monotonic() - self._turn_started_at
+        logger.info(
+            "First audio session_id=%s turn_id=%s latency=%.2fs",
+            self._session_id,
+            self._active_turn_id,
+            self._first_audio_latency,
+        )
+
+    def _finish_turn(self, outcome: str) -> None:
+        if self._active_turn_id is None:
+            return
+
+        duration = time.monotonic() - self._turn_started_at
+        if self._first_audio_latency is None:
+            logger.info(
+                "Turn finished session_id=%s turn_id=%s outcome=%s duration=%.2fs first_audio_latency=none",
+                self._session_id,
+                self._active_turn_id,
+                outcome,
+                duration,
+            )
+        else:
+            logger.info(
+                "Turn finished session_id=%s turn_id=%s outcome=%s duration=%.2fs first_audio_latency=%.2fs",
+                self._session_id,
+                self._active_turn_id,
+                outcome,
+                duration,
+                self._first_audio_latency,
+            )
+        self._active_turn_id = None
+        self._turn_started_at = 0.0
+        self._first_audio_latency = None

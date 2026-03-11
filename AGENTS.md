@@ -4,9 +4,12 @@ A voice-first AI companion for macOS. Floating presence widget with natural spee
 
 ## Architecture
 
-Read `docs/architecture.md` for the full technical design.  
-Read `docs/spec.md` for the product specification.  
-Read `docs/design-direction.md` for the visual and motion direction.  
+Read `docs/architecture.md` for the full technical design.
+Read `docs/spec.md` for the product specification.
+Read `docs/ipc-protocol.md` for the websocket contract and versioning rules.
+Read `docs/frontend-handoff.md` for backend-event to widget-state mapping.
+Read `docs/design-direction.md` for the visual and motion direction.
+Read `docs/observability.md` for runtime signals and incident triage.
 Read `docs/building-agents-reference.md` for implementation details used while building.
 
 ```
@@ -31,7 +34,10 @@ Samantha/
 ├── docs/
 │   ├── spec.md                         # Product specification
 │   ├── architecture.md                 # Technical architecture
+│   ├── ipc-protocol.md                 # WebSocket contract and versioning
+│   ├── frontend-handoff.md             # Backend events -> widget/audio/transcript behavior
 │   ├── design-direction.md             # Visual and motion direction
+│   ├── observability.md                # Runtime signals and incident triage
 │   └── building-agents-reference.md    # Build-time implementation reference
 ├── backend/                            # Python
 │   ├── pyproject.toml
@@ -81,14 +87,14 @@ Build in this order. Phase 1 is fully testable without Swift.
 
 ### Phase 2: Swift App
 1. Xcode project, LSUIElement, SwiftUI
-2. `OrbWindow.swift` + `OrbView.swift` - implement the presence widget from `docs/design-direction.md`
+2. `OrbWindow.swift` + `OrbView.swift` - implement the presence widget from `docs/design-direction.md` and `docs/frontend-handoff.md`
 3. `HotkeyManager.swift` - Option+S toggle
 4. `AudioManager.swift` - Mic capture (24kHz PCM16 mono) + playback
 5. `WebSocketClient.swift` - Connect to Python backend
 6. `BackendManager.swift` - Launch Python as subprocess
 7. Wire: hotkey -> capture -> WebSocket -> playback
 8. `SettingsView.swift` - API key, voice, preferences
-9. `TranscriptOverlay.swift` - Optional live transcript
+9. `TranscriptOverlay.swift` - Optional live transcript following `docs/frontend-handoff.md`
 
 ### Phase 3: Polish
 1. Error recovery and reconnect behavior
@@ -131,24 +137,24 @@ Build in this order. Phase 1 is fully testable without Swift.
 
 Swift -> Python:
 ```json
-{"type": "start_listening"}
-{"type": "stop_listening"}
-{"type": "interrupt"}
-{"type": "set_voice", "voice": "alloy"}
-{"type": "inject_context", "text": "..."}
-{"type": "approve_tool_call", "call_id": "call_123", "always": false}
-{"type": "reject_tool_call", "call_id": "call_123", "always": false}
+{"protocol_version": 1, "type": "start_listening"}
+{"protocol_version": 1, "type": "stop_listening"}
+{"protocol_version": 1, "type": "interrupt"}
+{"protocol_version": 1, "type": "set_voice", "voice": "alloy"}
+{"protocol_version": 1, "type": "inject_context", "text": "..."}
+{"protocol_version": 1, "type": "approve_tool_call", "call_id": "call_123", "always": false}
+{"protocol_version": 1, "type": "reject_tool_call", "call_id": "call_123", "always": false}
 ```
 
 Python -> Swift:
 ```json
-{"type": "state_change", "state": "listening|thinking|speaking|idle|error"}
-{"type": "transcript", "role": "user|assistant", "text": "...", "final": true}
-{"type": "tool_start", "name": "reason_deeply", "args": {"task": "..."}}
-{"type": "tool_end", "name": "reason_deeply", "result": "..."}
-{"type": "tool_approval_required", "name": "file_write", "call_id": "call_123", "args": {"path": "..."}}
-{"type": "clear_playback"}
-{"type": "error", "message": "..."}
+{"protocol_version": 1, "type": "state_change", "state": "listening|thinking|speaking|idle|error"}
+{"protocol_version": 1, "type": "transcript", "role": "user|assistant", "text": "...", "final": true}
+{"protocol_version": 1, "type": "tool_start", "name": "reason_deeply", "args": {"task": "..."}}
+{"protocol_version": 1, "type": "tool_end", "name": "reason_deeply", "result": "..."}
+{"protocol_version": 1, "type": "tool_approval_required", "name": "file_write", "call_id": "call_123", "args": {"path": "..."}}
+{"protocol_version": 1, "type": "clear_playback"}
+{"protocol_version": 1, "type": "error", "message": "..."}
 ```
 
 ## Data Storage

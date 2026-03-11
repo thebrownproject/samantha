@@ -22,6 +22,7 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - The visual direction is a warm orange continuous loop that feels alive and attentive.
 - Motion should be driven by state and smoothed speech energy, not by a raw waveform visualizer.
 - The detailed visual system, state behavior, and motion rules live in `docs/design-direction.md`.
+- The exact backend-event to widget-state mapping lives in `docs/frontend-handoff.md`.
 
 ## Core Capabilities
 

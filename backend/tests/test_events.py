@@ -15,10 +15,15 @@ from samantha.events import (
     msg_transcript,
     normalize_transcript,
 )
+from samantha.protocol import protocol_message
 
 
 def _evt(type: str, **kwargs) -> SimpleNamespace:
     return SimpleNamespace(type=type, **kwargs)
+
+
+def _msg(msg_type: str, **payload):
+    return protocol_message(msg_type, **payload)
 
 
 @pytest.fixture
@@ -35,15 +40,12 @@ def test_app_state_values():
 # -- JSON message builders --
 
 def test_msg_state_change():
-    assert msg_state_change(AppState.SPEAKING) == {
-        "type": "state_change",
-        "state": "speaking",
-    }
+    assert msg_state_change(AppState.SPEAKING) == _msg("state_change", state="speaking")
 
 
 def test_msg_transcript():
     m = msg_transcript("user", "hello", final=True)
-    assert m == {"type": "transcript", "role": "user", "text": "hello", "final": True}
+    assert m == _msg("transcript", role="user", text="hello", final=True)
 
 
 def test_msg_transcript_defaults():
@@ -53,38 +55,38 @@ def test_msg_transcript_defaults():
 
 def test_msg_tool_start_with_args():
     m = msg_tool_start("reason_deeply", {"task": "analyze"})
-    assert m == {"type": "tool_start", "name": "reason_deeply", "args": {"task": "analyze"}}
+    assert m == _msg("tool_start", name="reason_deeply", args={"task": "analyze"})
 
 
 def test_msg_tool_start_no_args():
     m = msg_tool_start("safe_bash")
-    assert m == {"type": "tool_start", "name": "safe_bash"}
+    assert m == _msg("tool_start", name="safe_bash")
     assert "args" not in m
 
 
 def test_msg_tool_end_with_result():
     m = msg_tool_end("reason_deeply", "42")
-    assert m == {"type": "tool_end", "name": "reason_deeply", "result": "42"}
+    assert m == _msg("tool_end", name="reason_deeply", result="42")
 
 
 def test_msg_tool_end_no_result():
     m = msg_tool_end("safe_bash")
-    assert m == {"type": "tool_end", "name": "safe_bash"}
+    assert m == _msg("tool_end", name="safe_bash")
     assert "result" not in m
 
 
 def test_msg_tool_approval_required():
     m = msg_tool_approval_required("file_write", "call_123", {"path": "/tmp/test.txt"})
-    assert m == {
-        "type": "tool_approval_required",
-        "name": "file_write",
-        "call_id": "call_123",
-        "args": {"path": "/tmp/test.txt"},
-    }
+    assert m == _msg(
+        "tool_approval_required",
+        name="file_write",
+        call_id="call_123",
+        args={"path": "/tmp/test.txt"},
+    )
 
 
 def test_msg_error():
-    assert msg_error("timeout") == {"type": "error", "message": "timeout"}
+    assert msg_error("timeout") == _msg("error", message="timeout")
 
 
 # -- EventDispatcher state transitions --
@@ -224,14 +226,14 @@ def test_on_tool_event_callback_end(dispatcher):
     tool = SimpleNamespace(name="safe_bash")
     dispatcher.handle_event(_evt("tool_end", tool=tool, output="ok"))
     assert len(events) == 1
-    assert events[0] == {"type": "tool_end", "name": "safe_bash", "result": "ok"}
+    assert events[0] == _msg("tool_end", name="safe_bash", result="ok")
 
 
 def test_on_error_callback(dispatcher):
     errors = []
     dispatcher.on_error(errors.append)
     dispatcher.handle_event(_evt("error", error="oops"))
-    assert errors == [{"type": "error", "message": "oops"}]
+    assert errors == [_msg("error", message="oops")]
 
 
 def test_on_tool_approval_callback(dispatcher):
@@ -242,12 +244,12 @@ def test_on_tool_approval_callback(dispatcher):
         _evt("tool_approval_required", tool=tool, call_id="call_1", arguments='{"path": "/tmp/test.txt"}')
     )
     assert approvals == [
-        {
-            "type": "tool_approval_required",
-            "name": "file_write",
-            "call_id": "call_1",
-            "args": {"path": "/tmp/test.txt"},
-        }
+        _msg(
+            "tool_approval_required",
+            name="file_write",
+            call_id="call_1",
+            args={"path": "/tmp/test.txt"},
+        )
     ]
 
 
@@ -291,7 +293,7 @@ def test_full_conversation_flow(dispatcher):
 
 def test_normalize_strips_whitespace():
     result = normalize_transcript("  hello world  ", "user", final=True)
-    assert result == {"type": "transcript", "role": "user", "text": "hello world", "final": True}
+    assert result == _msg("transcript", role="user", text="hello world", final=True)
 
 
 def test_normalize_partial_transcript():
@@ -339,7 +341,7 @@ def test_emit_transcript_fires_callbacks(dispatcher):
     dispatcher.on_transcript(received.append)
     dispatcher.emit_transcript("hello", "user", final=True)
     assert len(received) == 1
-    assert received[0] == {"type": "transcript", "role": "user", "text": "hello", "final": True}
+    assert received[0] == _msg("transcript", role="user", text="hello", final=True)
 
 
 def test_emit_transcript_suppresses_empty(dispatcher):
@@ -367,7 +369,7 @@ def test_history_added_emits_user_transcript(dispatcher):
     )
     dispatcher.handle_event(_evt("history_added", item=item))
     assert received == [
-        {"type": "transcript", "role": "user", "text": "hello from user", "final": True}
+        _msg("transcript", role="user", text="hello from user", final=True)
     ]
 
 
@@ -391,6 +393,6 @@ def test_history_updated_emits_assistant_partial_then_final(dispatcher):
     dispatcher.handle_event(_evt("history_updated", history=[partial]))
     dispatcher.handle_event(_evt("history_updated", history=[final]))
     assert received == [
-        {"type": "transcript", "role": "assistant", "text": "hello there", "final": False},
-        {"type": "transcript", "role": "assistant", "text": "hello there", "final": True},
+        _msg("transcript", role="assistant", text="hello there", final=False),
+        _msg("transcript", role="assistant", text="hello there", final=True),
     ]

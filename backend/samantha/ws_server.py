@@ -15,6 +15,7 @@ from websockets.exceptions import ConnectionClosed
 
 from samantha.config import VALID_VOICES, Config
 from samantha.events import AppState, msg_error, msg_state_change
+from samantha.protocol import attach_protocol_version, validate_protocol_message
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class WSServer:
         if self._ws is None:
             return
         with contextlib.suppress(ConnectionClosed):
-            await self._ws.send(json.dumps(msg))
+            await self._ws.send(json.dumps(attach_protocol_version(msg)))
 
     async def send_audio(self, data: bytes) -> None:
         if self._ws is None:
@@ -137,17 +138,18 @@ class WSServer:
         try:
             msg = json.loads(raw)
         except json.JSONDecodeError:
-            await ws.send(json.dumps(msg_error("Invalid JSON")))
+            await self._send_ws_json(ws, msg_error("Invalid JSON"))
             return
 
-        msg_type = msg.get("type")
-        if msg_type is None:
-            await ws.send(json.dumps(msg_error("Missing 'type' field")))
+        try:
+            msg = validate_protocol_message(msg)
+        except ValueError as exc:
+            await self._send_ws_json(ws, msg_error(str(exc)))
             return
 
-        handler = self._text_handlers.get(msg_type)
+        handler = self._text_handlers.get(msg["type"])
         if handler is None:
-            await ws.send(json.dumps(msg_error(f"Unknown message type: {msg_type}")))
+            await self._send_ws_json(ws, msg_error(f"Unknown message type: {msg['type']}"))
             return
 
         await handler(self, ws, msg)
@@ -172,7 +174,7 @@ class WSServer:
     async def _on_set_voice(self, ws: ServerConnection, msg: dict) -> None:
         voice = msg.get("voice", "")
         if voice not in VALID_VOICES:
-            await ws.send(json.dumps(msg_error(f"Invalid voice: {voice!r}")))
+            await self._send_ws_json(ws, msg_error(f"Invalid voice: {voice!r}"))
             return
         self.config.voice = voice
         await self._invoke_handler(self.voice_changed_handler, voice)
@@ -181,7 +183,7 @@ class WSServer:
     async def _on_inject_context(self, ws: ServerConnection, msg: dict) -> None:
         text = msg.get("text")
         if not text:
-            await ws.send(json.dumps(msg_error("Missing 'text' for inject_context")))
+            await self._send_ws_json(ws, msg_error("Missing 'text' for inject_context"))
             return
         self.injected_contexts.append(text)
         await self._invoke_handler(self.inject_context_handler, text)
@@ -190,7 +192,7 @@ class WSServer:
     async def _on_approve_tool_call(self, ws: ServerConnection, msg: dict) -> None:
         call_id = msg.get("call_id")
         if not isinstance(call_id, str) or not call_id:
-            await ws.send(json.dumps(msg_error("Missing 'call_id' for approve_tool_call")))
+            await self._send_ws_json(ws, msg_error("Missing 'call_id' for approve_tool_call"))
             return
         always = bool(msg.get("always", False))
         await self._invoke_handler(self.approve_tool_call_handler, call_id, always)
@@ -198,13 +200,17 @@ class WSServer:
     async def _on_reject_tool_call(self, ws: ServerConnection, msg: dict) -> None:
         call_id = msg.get("call_id")
         if not isinstance(call_id, str) or not call_id:
-            await ws.send(json.dumps(msg_error("Missing 'call_id' for reject_tool_call")))
+            await self._send_ws_json(ws, msg_error("Missing 'call_id' for reject_tool_call"))
             return
         always = bool(msg.get("always", False))
         await self._invoke_handler(self.reject_tool_call_handler, call_id, always)
 
     async def _on_get_state(self, _ws: ServerConnection, _msg: dict) -> None:
         await self.send_json(msg_state_change(self.app_state))
+
+    async def _send_ws_json(self, ws: ServerConnection, msg: dict[str, Any]) -> None:
+        with contextlib.suppress(ConnectionClosed):
+            await ws.send(json.dumps(attach_protocol_version(msg)))
 
     _text_handlers: ClassVar[dict[str, Any]] = {
         "start_listening": _on_start_listening,

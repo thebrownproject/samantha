@@ -17,6 +17,7 @@ from samantha.agents import create_voice_agent
 from samantha.config import Config
 from samantha.events import AppState, EventDispatcher
 from samantha.memory import MemoryStore
+from samantha.protocol import protocol_message
 from samantha.session_manager import SessionManager
 from samantha.tools import configure_memory, configure_tools, register_tools
 from samantha.ws_server import ConnectionState, start_server
@@ -50,6 +51,10 @@ def _extract_assistant_text(items) -> str | None:
             return " ".join(parts)
 
     return None
+
+
+def _msg(msg_type: str, **payload) -> str:
+    return json.dumps(protocol_message(msg_type, **payload))
 
 
 # -- Offline integration tests (no API key needed) --
@@ -86,7 +91,7 @@ async def test_ws_server_with_client(tmp_path):
     async with connect(f"ws://{host}:{port}") as client:
         assert ws.state == ConnectionState.CONNECTED
 
-        await client.send(json.dumps({"type": "start_listening"}))
+        await client.send(_msg("start_listening"))
         await asyncio.sleep(0.05)
         assert ws.listening is True
 
@@ -95,11 +100,11 @@ async def test_ws_server_with_client(tmp_path):
         await asyncio.sleep(0.05)
         assert len(ws.received_audio) == 1
 
-        await client.send(json.dumps({"type": "stop_listening"}))
+        await client.send(_msg("stop_listening"))
         await asyncio.sleep(0.05)
         assert ws.listening is False
 
-        await client.send(json.dumps({"type": "interrupt"}))
+        await client.send(_msg("interrupt"))
         await asyncio.sleep(0.05)
         assert ws.interrupt_count == 1
 
@@ -222,7 +227,11 @@ async def test_web_search_smoke():
     cfg = Config(safe_mode=False)
     configure_tools(cfg)
     result = await _web_search("OpenAI agents SDK Python")
-    assert len(result) > 0
+    payload = json.loads(result)
+    assert payload["query"] == "OpenAI agents SDK Python"
+    assert "results" in payload
+    assert "summary" in payload
+    assert payload["results"] or payload["summary"]
 
 
 @pytest.mark.e2e

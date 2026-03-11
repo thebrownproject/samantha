@@ -12,6 +12,7 @@ from websockets.asyncio.client import connect
 
 from samantha.config import Config
 from samantha.events import AppState
+from samantha.protocol import IPC_PROTOCOL_VERSION, protocol_message
 from samantha.ws_server import ConnectionState, WSServer
 
 
@@ -37,6 +38,10 @@ async def server(config):
 def _uri(srv: WSServer) -> str:
     host, port = srv.address
     return f"ws://{host}:{port}"
+
+
+def _msg(msg_type: str, **payload) -> str:
+    return json.dumps(protocol_message(msg_type, **payload))
 
 
 # -- Server lifecycle --
@@ -68,7 +73,7 @@ async def test_single_connection_only(server):
 @pytest.mark.asyncio
 async def test_start_listening(server):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "start_listening"}))
+        await ws.send(_msg("start_listening"))
         await asyncio.sleep(0.05)
         assert server.listening is True
 
@@ -76,8 +81,8 @@ async def test_start_listening(server):
 @pytest.mark.asyncio
 async def test_stop_listening(server):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "start_listening"}))
-        await ws.send(json.dumps({"type": "stop_listening"}))
+        await ws.send(_msg("start_listening"))
+        await ws.send(_msg("stop_listening"))
         await asyncio.sleep(0.05)
         assert server.listening is False
 
@@ -85,7 +90,7 @@ async def test_stop_listening(server):
 @pytest.mark.asyncio
 async def test_set_voice(server, config):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "set_voice", "voice": "coral"}))
+        await ws.send(_msg("set_voice", voice="coral"))
         await asyncio.sleep(0.05)
         assert config.voice == "coral"
 
@@ -93,9 +98,10 @@ async def test_set_voice(server, config):
 @pytest.mark.asyncio
 async def test_set_voice_invalid(server, config):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "set_voice", "voice": "invalid_voice"}))
+        await ws.send(_msg("set_voice", voice="invalid_voice"))
         resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
         assert resp["type"] == "error"
+        assert resp["protocol_version"] == IPC_PROTOCOL_VERSION
         assert "voice" in resp["message"].lower()
         assert config.voice == "ash"
 
@@ -103,7 +109,7 @@ async def test_set_voice_invalid(server, config):
 @pytest.mark.asyncio
 async def test_inject_context(server):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "inject_context", "text": "user is tired"}))
+        await ws.send(_msg("inject_context", text="user is tired"))
         await asyncio.sleep(0.05)
         assert server.injected_contexts[-1] == "user is tired"
 
@@ -111,7 +117,7 @@ async def test_inject_context(server):
 @pytest.mark.asyncio
 async def test_interrupt(server):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "interrupt"}))
+        await ws.send(_msg("interrupt"))
         await asyncio.sleep(0.05)
         assert server.interrupt_count == 1
 
@@ -127,7 +133,7 @@ async def test_start_listening_invokes_handler(server):
     server.start_listening_handler = handler
 
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "start_listening"}))
+        await ws.send(_msg("start_listening"))
         await asyncio.sleep(0.05)
         assert called is True
 
@@ -143,7 +149,7 @@ async def test_interrupt_invokes_handler(server):
     server.interrupt_handler = handler
 
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "interrupt"}))
+        await ws.send(_msg("interrupt"))
         await asyncio.sleep(0.05)
         assert called is True
 
@@ -151,9 +157,10 @@ async def test_interrupt_invokes_handler(server):
 @pytest.mark.asyncio
 async def test_unknown_message_type(server):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "unknown_type"}))
+        await ws.send(_msg("unknown_type"))
         resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
         assert resp["type"] == "error"
+        assert resp["protocol_version"] == IPC_PROTOCOL_VERSION
         assert "unknown" in resp["message"].lower()
 
 
@@ -163,14 +170,40 @@ async def test_invalid_json(server):
         await ws.send("not json {{{")
         resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
         assert resp["type"] == "error"
+        assert resp["protocol_version"] == IPC_PROTOCOL_VERSION
 
 
 @pytest.mark.asyncio
 async def test_missing_type_field(server):
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"data": "no type"}))
+        await ws.send(json.dumps({"protocol_version": IPC_PROTOCOL_VERSION, "data": "no type"}))
         resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
         assert resp["type"] == "error"
+        assert resp["protocol_version"] == IPC_PROTOCOL_VERSION
+
+
+@pytest.mark.asyncio
+async def test_missing_protocol_version(server):
+    async with connect(_uri(server)) as ws:
+        await ws.send(json.dumps({"type": "start_listening"}))
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+        assert resp == {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "type": "error",
+            "message": "Missing 'protocol_version' field",
+        }
+
+
+@pytest.mark.asyncio
+async def test_unsupported_protocol_version(server):
+    async with connect(_uri(server)) as ws:
+        await ws.send(json.dumps({"protocol_version": 99, "type": "start_listening"}))
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+        assert resp == {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "type": "error",
+            "message": "Unsupported protocol_version: 99. Supported versions: 1",
+        }
 
 
 # -- Binary message handling --
@@ -185,7 +218,7 @@ async def test_binary_forwarded_when_listening(server):
     server.audio_handler = audio_handler
 
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "start_listening"}))
+        await ws.send(_msg("start_listening"))
         await asyncio.sleep(0.02)
         audio = b"\x00\x01" * 480
         await ws.send(audio)
@@ -210,7 +243,11 @@ async def test_send_text_message(server):
         await asyncio.sleep(0.02)
         await server.send_json({"type": "state_change", "state": "listening"})
         resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
-        assert resp == {"type": "state_change", "state": "listening"}
+        assert resp == {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "type": "state_change",
+            "state": "listening",
+        }
 
 
 @pytest.mark.asyncio
@@ -245,8 +282,8 @@ async def test_approve_and_reject_tool_call_handlers(server):
     server.reject_tool_call_handler = reject
 
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "approve_tool_call", "call_id": "call_1", "always": True}))
-        await ws.send(json.dumps({"type": "reject_tool_call", "call_id": "call_2"}))
+        await ws.send(_msg("approve_tool_call", call_id="call_1", always=True))
+        await ws.send(_msg("reject_tool_call", call_id="call_2"))
         await asyncio.sleep(0.05)
 
     assert approved == [("call_1", True)]
@@ -258,6 +295,10 @@ async def test_get_state_returns_current_app_state(server):
     server.app_state = AppState.THINKING
 
     async with connect(_uri(server)) as ws:
-        await ws.send(json.dumps({"type": "get_state"}))
+        await ws.send(_msg("get_state"))
         resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
-        assert resp == {"type": "state_change", "state": "thinking"}
+        assert resp == {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "type": "state_change",
+            "state": "thinking",
+        }

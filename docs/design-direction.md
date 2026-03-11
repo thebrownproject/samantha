@@ -88,6 +88,7 @@ Raw audio should not directly drive the shape. The widget should have its own id
 - The main app window should prioritize the widget over traditional UI chrome
 - Hotkey activation and interruption should visibly affect the widget immediately
 - Playback, listening, thinking, and tool activity should each have a distinct but related motion signature
+- Exact event-to-widget mapping should follow `docs/frontend-handoff.md`
 
 ## Implementation Guidance
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 import shlex
@@ -11,6 +12,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import openai
 from agents import Agent, Runner, Usage, function_tool
@@ -349,6 +351,23 @@ def _get_openai_client() -> openai.AsyncOpenAI:
     return _openai_client
 
 
+def _serialize_web_search_response(
+    *,
+    query: str,
+    summary: str = "",
+    results: list[dict[str, str]] | None = None,
+    error: str | None = None,
+) -> str:
+    payload: dict[str, Any] = {
+        "query": query,
+        "summary": summary.strip(),
+        "results": results or [],
+    }
+    if error is not None:
+        payload["error"] = error
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+
+
 async def _web_search(query: str) -> str:
     """Search the web via OpenAI Responses API and return structured results."""
     client = _get_openai_client()
@@ -359,22 +378,33 @@ async def _web_search(query: str) -> str:
             input=query,
         )
     except Exception as exc:
-        return format_tool_error("web_search", str(exc))
+        return _serialize_web_search_response(query=query, error=str(exc))
 
-    lines: list[str] = []
+    summary_parts: list[str] = []
+    results: list[dict[str, str]] = []
+    seen_results: set[tuple[str, str]] = set()
     for item in response.output:
         if item.type == "message":
             for block in item.content:
                 if hasattr(block, "text"):
-                    lines.append(block.text)
+                    text = str(block.text).strip()
+                    if text:
+                        summary_parts.append(text)
                 if hasattr(block, "annotations"):
                     for ann in block.annotations:
                         if hasattr(ann, "url") and hasattr(ann, "title"):
-                            lines.append(f"  [{ann.title}]({ann.url})")
+                            title = str(ann.title).strip()
+                            url = str(ann.url).strip()
+                            key = (title, url)
+                            if title and url and key not in seen_results:
+                                seen_results.add(key)
+                                results.append({"title": title, "url": url})
 
-    if not lines:
-        return f"No results found for: {query}"
-    return "\n".join(lines)
+    return _serialize_web_search_response(
+        query=query,
+        summary=" ".join(summary_parts),
+        results=results,
+    )
 
 
 @function_tool
