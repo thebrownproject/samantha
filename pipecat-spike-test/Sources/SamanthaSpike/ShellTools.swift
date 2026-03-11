@@ -18,14 +18,12 @@ private let dangerousPatterns = [
 
 enum ShellToolError: Error, LocalizedError {
     case missingArgument(String)
-    case blockedCommand(String)
     case timeout
     case processError(String)
 
     var errorDescription: String? {
         switch self {
         case .missingArgument(let arg): return "Missing required argument: \(arg)"
-        case .blockedCommand(let reason): return "Blocked: \(reason)"
         case .timeout: return "Command timed out after \(Int(processTimeout))s"
         case .processError(let msg): return msg
         }
@@ -61,6 +59,21 @@ private func truncateOutput(_ output: String) -> String {
     return String(output.prefix(maxOutput)) + "\n... truncated (\(output.count) chars total)"
 }
 
+/// Tracks whether a continuation has been resumed to prevent double-resume crashes.
+private final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = false
+
+    /// Returns true exactly once; all subsequent calls return false.
+    func claim() -> Bool {
+        lock.withLock {
+            guard !fired else { return false }
+            fired = true
+            return true
+        }
+    }
+}
+
 private func runProcess(
     executable: String,
     arguments: [String]
@@ -69,44 +82,44 @@ private func runProcess(
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = arguments
 
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    process.standardOutput = stdoutPipe
+    process.standardError = stderrPipe
 
     try process.run()
 
-    return try await withThrowingTaskGroup(of: String.self) { group in
-        group.addTask {
-            try await withCheckedThrowingContinuation { continuation in
-                DispatchQueue.global().asyncAfter(deadline: .now() + processTimeout) {
-                    if process.isRunning {
-                        process.terminate()
-                        continuation.resume(throwing: ShellToolError.timeout)
-                    }
-                }
-                process.terminationHandler = { _ in
-                    let out = stdout.fileHandleForReading.readDataToEndOfFile()
-                    let err = stderr.fileHandleForReading.readDataToEndOfFile()
-                    let outStr = String(data: out, encoding: .utf8) ?? ""
-                    let errStr = String(data: err, encoding: .utf8) ?? ""
+    let result: String = try await withCheckedThrowingContinuation { continuation in
+        let once = OnceFlag()
 
-                    if process.terminationStatus != 0 && !errStr.isEmpty {
-                        continuation.resume(returning: "Error: \(errStr.trimmingCharacters(in: .whitespacesAndNewlines))")
-                    } else {
-                        let combined = (outStr + errStr).trimmingCharacters(in: .whitespacesAndNewlines)
-                        continuation.resume(returning: combined.isEmpty ? "(no output)" : combined)
-                    }
-                }
+        // Timeout: terminate process and resume with error
+        DispatchQueue.global().asyncAfter(deadline: .now() + processTimeout) {
+            if process.isRunning { process.terminate() }
+            if once.claim() {
+                continuation.resume(throwing: ShellToolError.timeout)
             }
         }
 
-        guard let result = try await group.next() else {
-            return "(no output)"
+        // Normal completion: read output and resume with result
+        process.terminationHandler = { _ in
+            let out = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let err = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            guard once.claim() else { return }
+
+            let outStr = String(data: out, encoding: .utf8) ?? ""
+            let errStr = String(data: err, encoding: .utf8) ?? ""
+
+            if process.terminationStatus != 0 && !errStr.isEmpty {
+                let msg = errStr.trimmingCharacters(in: .whitespacesAndNewlines)
+                continuation.resume(returning: "Error: \(msg)")
+            } else {
+                let combined = (outStr + errStr).trimmingCharacters(in: .whitespacesAndNewlines)
+                continuation.resume(returning: combined.isEmpty ? "(no output)" : combined)
+            }
         }
-        group.cancelAll()
-        return truncateOutput(result)
     }
+
+    return truncateOutput(result)
 }
 
 func safeBashHandler(_ arguments: String) async throws -> String {
@@ -131,7 +144,7 @@ func safeBashHandler(_ arguments: String) async throws -> String {
     log.info("Executing: \(command)")
     do {
         return try await runProcess(executable: "/bin/bash", arguments: ["-c", command])
-    } catch let error as ShellToolError where error.localizedDescription?.contains("timed out") == true {
+    } catch ShellToolError.timeout {
         return "Error in safe_bash: command timed out after \(Int(processTimeout))s"
     } catch {
         return "Error in safe_bash: \(error.localizedDescription)"
@@ -145,7 +158,7 @@ func applescriptHandler(_ arguments: String) async throws -> String {
     log.info("Executing AppleScript (\(script.prefix(80))...)")
     do {
         return try await runProcess(executable: "/usr/bin/osascript", arguments: ["-e", script])
-    } catch let error as ShellToolError where error.localizedDescription?.contains("timed out") == true {
+    } catch ShellToolError.timeout {
         return "Error in applescript: script timed out after \(Int(processTimeout))s"
     } catch {
         return "Error in applescript: \(error.localizedDescription)"
