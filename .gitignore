@@ -1,1 +1,29 @@
 .env
+
+# macOS metadata
+.DS_Store
+._*
+
+# Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local issue-tracking / Dolt state
+.beads/
+.dolt/
+.doltcfg/
+beads/
+beads_sam/
+config.yaml
+
+# Swift / Xcode local state
+DerivedData/
+.build/
+*.xcuserstate
+xcuserdata/
