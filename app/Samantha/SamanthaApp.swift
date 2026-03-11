@@ -272,6 +272,13 @@ extension AppDelegate: WebSocketClientDelegate {
             let callId = message["call_id"] as? String ?? ""
             consoleState.addApproval(callId: callId, toolName: name, argsDescription: formatArgs(message["args"]))
             consoleState.log("APPROVAL REQUIRED: \(name) (call_id: \(callId))", level: .warning)
+        case "app_tool_start":
+            let name = message["name"] as? String ?? "unknown"
+            consoleState.log("app_tool_call: \(name) (executing...)", level: .info)
+        case "app_tool_end":
+            let name = message["name"] as? String ?? "unknown"
+            let ok = message["ok"] as? Bool ?? false
+            consoleState.log("app_tool_result: \(name) -> \(ok ? "success" : "failed")", level: ok ? .info : .error)
         default:
             consoleState.log("Unknown tool message: \(type)", level: .debug)
         }

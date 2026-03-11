@@ -295,10 +295,28 @@ final class WebSocketClient: ObservableObject {
             return
         }
 
+        delegate?.webSocketClient(self, didReceiveToolMessage: [
+            "type": "app_tool_start",
+            "name": tool,
+            "request_id": requestID,
+        ])
+
         do {
             let result = try await appToolExecutor.execute(tool: tool, args: args)
+            delegate?.webSocketClient(self, didReceiveToolMessage: [
+                "type": "app_tool_end",
+                "name": tool,
+                "request_id": requestID,
+                "ok": true,
+            ])
             try await sendAppToolResult(requestID: requestID, ok: true, result: result, error: nil)
         } catch {
+            delegate?.webSocketClient(self, didReceiveToolMessage: [
+                "type": "app_tool_end",
+                "name": tool,
+                "request_id": requestID,
+                "ok": false,
+            ])
             try? await sendAppToolResult(
                 requestID: requestID,
                 ok: false,
