@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		24F9FA549B09CC5BC06FEA60 /* OrbWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F9C2DD59F808F26D76E551 /* OrbWindow.swift */; };
 		2AEEABDDDD798D8982E88FB2 /* OrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4CBFDBE8CD0CFA8F84F73EB /* OrbView.swift */; };
+		31905192255619B75E05E7DA /* DevConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0CAC8177ECC799E3670CE4 /* DevConsoleView.swift */; };
 		408EF1239AACED4926129868 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE67F7177C8D31B7C38B50AF /* HotkeyManager.swift */; };
 		707079B64EB4ACFC43543CF3 /* SamanthaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2CA0F804A17F515B6E381B /* SamanthaApp.swift */; };
 		74CFAB5A189E9A81651A5663 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA2BF3533D54D0EBB6B62E8 /* AudioManager.swift */; };
@@ -18,6 +19,7 @@
 		CA25201D962F77F57B0D59FD /* SamanthaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7589F53D72CF088E0B40F91 /* SamanthaTests.swift */; };
 		D5DD2F7407F8D82E408C70C3 /* DesktopContextToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F409D92F672D0AE3AD7A6E9 /* DesktopContextToolExecutor.swift */; };
 		DF2885915DF74C9DE6D4E79C /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6A80B2DACD523C28E245F /* WebSocketClient.swift */; };
+		DFBFA408198B595E51E17605 /* DevConsoleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C06F8AE47A2CFB41B1856BE /* DevConsoleState.swift */; };
 		E4E3CE9C25DD2A4F701ECFE8 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8115B6CC562788A2B3279BD9 /* KeychainHelper.swift */; };
 /* End PBXBuildFile section */
 
@@ -34,6 +36,7 @@
 /* Begin PBXFileReference section */
 		098950A3DC4FF670CF1E42B0 /* SamanthaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SamanthaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D2CA0F804A17F515B6E381B /* SamanthaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamanthaApp.swift; sourceTree = "<group>"; };
+		2A0CAC8177ECC799E3670CE4 /* DevConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevConsoleView.swift; sourceTree = "<group>"; };
 		3F409D92F672D0AE3AD7A6E9 /* DesktopContextToolExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopContextToolExecutor.swift; sourceTree = "<group>"; };
 		427FE0F2D960289E8EE509F6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		55D6A80B2DACD523C28E245F /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
@@ -41,6 +44,7 @@
 		6908B064DE948311BD6A88EE /* Samantha.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Samantha.entitlements; sourceTree = "<group>"; };
 		80F9C2DD59F808F26D76E551 /* OrbWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbWindow.swift; sourceTree = "<group>"; };
 		8115B6CC562788A2B3279BD9 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		9C06F8AE47A2CFB41B1856BE /* DevConsoleState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevConsoleState.swift; sourceTree = "<group>"; };
 		ACA2BF3533D54D0EBB6B62E8 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
 		B35727F848BEAE22A0D08517 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B7589F53D72CF088E0B40F91 /* SamanthaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamanthaTests.swift; sourceTree = "<group>"; };
@@ -83,6 +87,8 @@
 			children = (
 				ACA2BF3533D54D0EBB6B62E8 /* AudioManager.swift */,
 				3F409D92F672D0AE3AD7A6E9 /* DesktopContextToolExecutor.swift */,
+				9C06F8AE47A2CFB41B1856BE /* DevConsoleState.swift */,
+				2A0CAC8177ECC799E3670CE4 /* DevConsoleView.swift */,
 				EE67F7177C8D31B7C38B50AF /* HotkeyManager.swift */,
 				B35727F848BEAE22A0D08517 /* Info.plist */,
 				8115B6CC562788A2B3279BD9 /* KeychainHelper.swift */,
@@ -195,6 +201,8 @@
 			files = (
 				74CFAB5A189E9A81651A5663 /* AudioManager.swift in Sources */,
 				D5DD2F7407F8D82E408C70C3 /* DesktopContextToolExecutor.swift in Sources */,
+				DFBFA408198B595E51E17605 /* DevConsoleState.swift in Sources */,
+				31905192255619B75E05E7DA /* DevConsoleView.swift in Sources */,
 				408EF1239AACED4926129868 /* HotkeyManager.swift in Sources */,
 				E4E3CE9C25DD2A4F701ECFE8 /* KeychainHelper.swift in Sources */,
 				2AEEABDDDD798D8982E88FB2 /* OrbView.swift in Sources */,
