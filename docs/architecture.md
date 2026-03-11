@@ -47,7 +47,7 @@ See `docs/ipc-protocol.md` for the websocket contract, `docs/frontend-handoff.md
 |  |                                                   |   |
 |  |  RealtimeAgent (voice session specialist)         |   |
 |  |  - Session model: gpt-realtime*                   |   |
-|  |  - Tools: memory_search, calendar, delegation     |   |
+|  |  - Tools: memory_search, applescript, delegation  |   |
 |  |  - Optional realtime handoffs to specialists      |   |
 |  +--------------------------------------------------+   |
 |            |                                             |
@@ -59,7 +59,7 @@ See `docs/ipc-protocol.md` for the websocket contract, `docs/frontend-handoff.md
 |            |                                             |
 |  +--------------------------------------------------+   |
 |  | Tool Layer                                          |  |
-|  | - AppleScript MCP tools                             |  |
+|  | - applescript (direct osascript execution)           |  |
 |  | - bash, file_read, file_write, web_search          |  |
 |  | - frontmost_app_context, capture_display           |  |
 |  | - memory_save, memory_search                        |  |
@@ -147,7 +147,7 @@ Widget behavior rules:
 #### Startup flow
 1. Swift launches backend subprocess.
 2. Backend starts WebSocket server on `localhost:9090`.
-3. Backend initializes memory, tool registry, MCP, and realtime runner.
+3. Backend initializes memory, tool registry, and realtime runner.
 4. Backend reports `idle` state to Swift.
 
 #### Realtime session configuration (target)
@@ -161,13 +161,13 @@ runner = RealtimeRunner(
             "audio": {
                 "input": {
                     "format": "pcm16",
-                    "transcription": {"model": "gpt-4o-mini-transcribe"},
+                    "transcription": {"model": "gpt-4o-mini-transcribe", "language": "en"},
                     "turn_detection": {
                         "type": "semantic_vad",
                         "interrupt_response": True,
                     },
                 },
-                "output": {"format": "pcm16", "voice": "ash"},
+                "output": {"format": "pcm16", "voice": "sage"},
             },
         },
         "async_tool_calls": True,
@@ -274,15 +274,14 @@ The runtime appends JSON strings into `daily_logs.entry` for structured replay a
 ## Build Sequence
 
 ### Phase 1: Python backend first
-1. Set up project + dependencies (`openai-agents`, `websockets`, `sqlite-vec`, `sentence-transformers`, `mcp`).
+1. Set up project + dependencies (`openai-agents`, `websockets`, `sqlite-vec`, `sentence-transformers`).
 2. Implement prompts and base `RealtimeAgent`.
 3. Implement safety baseline (`safe_mode`, command allowlist, file path validation).
-4. Implement core tools (`bash`, `file_read`, `file_write`, `web_search`, memory tools).
+4. Implement core tools (`bash`, `file_read`, `file_write`, `web_search`, `applescript`, memory tools).
 5. Add realtime session config (`gpt-realtime`, turn detection, interruption behavior).
 6. Implement delegation tool to `gpt-5-mini-2025-08-07`.
-7. Integrate AppleScript MCP tools.
-8. Add WebSocket bridge server for Swift.
-9. Add tests for tools, memory, interruption, and delegation.
+7. Add WebSocket bridge server for Swift.
+8. Add tests for tools, memory, interruption, and delegation.
 
 ### Phase 2: Swift app
 1. Create app shell (LSUIElement + SwiftUI).
@@ -307,7 +306,6 @@ openai-agents          # RealtimeAgent/Runner/Session + tools
 websockets             # Local Swift <-> Python IPC
 sqlite-vec             # Vector similarity in SQLite
 sentence-transformers  # Local embeddings (all-MiniLM-L6-v2)
-mcp                    # AppleScript MCP integration
 ```
 
 ### Swift

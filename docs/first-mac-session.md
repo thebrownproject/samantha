@@ -178,11 +178,11 @@ Run these checks in order:
 
 ### `WebSocketClient.swift`
 
-[WebSocketClient.swift](/home/fraser/thebrownproject/samantha/app/Samantha/WebSocketClient.swift) currently marks the socket as connected immediately after `resume()`. During the first Mac compile/run, change that if it causes false-connected UI state when the backend is unavailable.
+[Fixed] The false-connected bug has been resolved. Connection state is now deferred to `URLSessionWebSocketDelegate.didOpenWithProtocol` instead of being set immediately after `resume()`. The client also sets `maximumMessageSize` to 20 MB to support large `capture_display` payloads.
 
 ### `AudioManager.swift`
 
-[AudioManager.swift](/home/fraser/thebrownproject/samantha/app/Samantha/AudioManager.swift) currently uses a full teardown inside `stopInputCapture()`. It may be acceptable for now, but if it causes playback lag or engine churn, split input-stop from full-engine teardown.
+[Fixed] Engine churn from `stopInputCapture()` has been addressed. Input capture stop is now separated from full engine teardown.
 
 ## 9. What not to do on day one
 

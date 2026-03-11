@@ -35,7 +35,7 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - Push-to-talk (hotkey) with option for always-listening mode later
 
 ### Computer Access
-- **AppleScript MCP**: Calendar, Reminders, Finder, Music/Spotify, Notes, System
+- **AppleScript**: Calendar, Reminders, Finder, Music/Spotify, Notes, System (via direct `osascript` tool)
 - **Bash tool**: Run shell commands (git, scripts, file operations)
 - **File read/write**: Create, read, and edit files anywhere on the system
 - **Web search**: Look things up on the internet
@@ -82,7 +82,7 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - No cloud sync (everything local)
 - No screen/camera vision (future)
 - No always-listening wake word (future, start with hotkey activation)
-- No third-party integrations beyond AppleScript and bash
+- No third-party integrations beyond AppleScript, bash, and web search
 - No generic chat-window-first experience as the primary interface
 - No generalized screenshot-driven clicking/typing computer-use loop in the first macOS context-capture phase
 - No `selected_text` tool in the first macOS context-capture phase

@@ -23,7 +23,7 @@ realtime_config = {
         "audio": {
             "input": {
                 "format": "pcm16",
-                "transcription": {"model": "gpt-4o-mini-transcribe"},
+                "transcription": {"model": "gpt-4o-mini-transcribe", "language": "en"},
                 "turn_detection": {
                     "type": "semantic_vad",
                     "interrupt_response": True,
@@ -31,7 +31,7 @@ realtime_config = {
             },
             "output": {
                 "format": "pcm16",
-                "voice": "ash",
+                "voice": "sage",
             },
         },
         "tool_choice": "auto",
@@ -103,7 +103,8 @@ Guidelines:
 
 - Safe mode defaults ON for development.
 - Validate every file path before file tool operations.
-- Restrict shell commands to explicit allowlist patterns.
+- Restrict shell commands to a default allowlist (`open`, `ls`, `cat`, `head`, `tail`, `mkdir`, `cp`, `mv`, `rm`, `touch`, `grep`, `find`, `sort`, `pbcopy`, `pbpaste`, etc.).
+- File paths are resolved via `_resolve_user_path()` which handles `~`, `$HOME`, and relative paths against the home directory.
 - Require confirmation for destructive operations.
 - Fail fast with specific error messages.
 

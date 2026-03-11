@@ -21,8 +21,7 @@ Swift app (floating presence widget, audio I/O, hotkey)
 Python backend (OpenAI Agents SDK)
     |-- RealtimeAgent (voice session specialist)
     |-- Delegation tool -> gpt-5-mini-2025-08-07 (deep reasoning)
-    |-- Tools: bash, file_read, file_write, web_search, frontmost_app_context, capture_display, memory
-    |-- AppleScript MCP (calendar, reminders, finder, music, system)
+    |-- Tools: bash, file_read, file_write, web_search, applescript, frontmost_app_context, capture_display, memory
     |-- Memory: SQLite + FTS5 + sqlite-vec (~/.samantha/)
 ```
 
@@ -45,7 +44,7 @@ Samantha/
 │   │   ├── __init__.py
 │   │   ├── main.py                     # Entry point: start WebSocket server + agents
 │   │   ├── agents.py                   # RealtimeAgent definitions + delegation behavior
-│   │   ├── tools.py                    # bash, file_read, file_write, web_search, delegation
+│   │   ├── tools.py                    # bash, file_read, file_write, web_search, applescript, delegation
 │   │   ├── memory.py                   # SQLite + FTS5 + sqlite-vec memory system
 │   │   ├── ws_server.py                # WebSocket server (audio + control IPC)
 │   │   ├── config.py                   # Settings management (~/.samantha/config.json)
@@ -72,9 +71,9 @@ Samantha/
 Build in this order. Phase 1 is fully testable without Swift.
 
 ### Phase 1: Python Backend
-1. `pyproject.toml` with dependencies (openai-agents, websockets, sqlite-vec, sentence-transformers, mcp)
+1. `pyproject.toml` with dependencies (openai-agents, websockets, sqlite-vec, sentence-transformers)
 2. `samantha/prompts.py` - System prompts
-3. `samantha/tools.py` - Include safe wrappers for bash/file tools and reasoning delegation
+3. `samantha/tools.py` - Include safe wrappers for bash/file tools, applescript, and reasoning delegation
 4. `samantha/agents.py` - RealtimeAgent + optional realtime specialist handoffs
 5. Configure realtime session (`model_name=gpt-realtime`, `turn_detection.interrupt_response=true`)
 6. Add delegation tool path for `gpt-5-mini-2025-08-07`
@@ -107,7 +106,6 @@ Build in this order. Phase 1 is fully testable without Swift.
 - **websockets** - WebSocket server for Swift IPC
 - **sqlite-vec** - Vector similarity search extension for SQLite
 - **sentence-transformers** - Local embeddings (all-MiniLM-L6-v2, 384 dims)
-- **mcp** - MCP client for AppleScript tool server
 
 ### Swift App
 - **SwiftUI + AppKit** - UI framework
@@ -122,7 +120,7 @@ Build in this order. Phase 1 is fully testable without Swift.
 2. **Use realtime model for live voice** (`gpt-realtime*`) and keep interruption behavior native to realtime session settings.
 3. **Use `gpt-5-mini-2025-08-07` through delegated tools** for heavier reasoning, not as the direct speech model.
 4. **Local-first memory** in `~/.samantha/` with no cloud account dependency.
-5. **AppleScript via MCP** to reuse mature system-control integrations.
+5. **AppleScript via direct `osascript`** for simple, reliable macOS system control without external dependencies.
 6. **Push-to-talk first** for V1 scope and reliability.
 7. **First-phase macOS visual context stays narrow**: `frontmost_app_context` plus `capture_display`, with more invasive computer-use features deferred.
 

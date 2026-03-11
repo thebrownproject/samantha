@@ -120,7 +120,21 @@ Likely causes:
 - wrong `call_id`
 - protocol mismatch
 
-### 5. Repeated session reconnects
+### 5. `capture_display` disconnects the WebSocket
+
+Check:
+
+- message size of the `app_tool_result` payload (base64 screenshots can be 5-10 MB)
+- `max_size` on the Python `websockets.serve()` call (must be >= 20 MB)
+- `maximumMessageSize` on the Swift `URLSessionWebSocketTask` (must match)
+- backend logs for connection-closed errors around the tool call
+
+Likely causes:
+
+- WebSocket frame exceeds the server or client max message size
+- large retina screenshots producing oversized base64 payloads
+
+### 6. Repeated session reconnects
 
 Check:
 
