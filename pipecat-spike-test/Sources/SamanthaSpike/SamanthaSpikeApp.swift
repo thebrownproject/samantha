@@ -22,6 +22,7 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
     let audioManager = AudioManager()
     let desktopContextToolExecutor = DesktopContextToolExecutor()
     private(set) var orbController: OrbWindowController?
+    private(set) var conversationLoop: ConversationLoop?
 
     lazy var consoleActions: DevConsoleActions = DevConsoleActions(
         onTalkToggle: { [weak self] in self?.toggleListening() },
@@ -46,8 +47,12 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
 
         SpikeConfig.bootstrapStorage()
 
-        if let config = try? SpikeConfig.load() {
+        let config: SpikeConfig
+        if let loaded = try? SpikeConfig.load() {
+            config = loaded
             consoleState.log("Config loaded (llm: \(config.llmProvider)/\(config.llmModel))")
+        } else {
+            config = .defaults
         }
 
         for account in KeychainAccount.allCases {
@@ -58,6 +63,23 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        if let deepgramKey = KeychainHelper.loadAPIKey(for: .deepgramAPIKey),
+           let openRouterKey = KeychainHelper.loadAPIKey(for: .openRouterAPIKey) {
+            let loop = ConversationLoop(
+                audioManager: audioManager,
+                consoleState: consoleState,
+                transcriptStore: controller.transcriptStore,
+                deepgramAPIKey: deepgramKey,
+                openRouterAPIKey: openRouterKey,
+                config: config
+            )
+            loop.orbState = controller.orbState
+            conversationLoop = loop
+            consoleState.log("ConversationLoop initialized")
+        } else {
+            consoleState.log("ConversationLoop not initialized -- missing API keys", level: .warning)
+        }
+
         consoleState.log("Spike app launched")
     }
 
@@ -66,30 +88,28 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        conversationLoop?.interrupt()
         audioManager.stopCapture()
     }
 
     private func toggleListening() {
-        switch consoleState.appState {
-        case .idle:
-            consoleState.appState = .listening
-            consoleState.log("Listening started (no STT client yet)")
+        guard let loop = conversationLoop else {
+            consoleState.log("No ConversationLoop -- check API keys", level: .error)
+            return
+        }
+
+        switch loop.appState {
+        case .idle, .error:
+            loop.startListening()
         case .listening:
-            consoleState.appState = .idle
-            consoleState.log("Listening stopped")
+            loop.stopListening()
         case .thinking, .speaking:
-            interruptConversation()
-        case .error:
-            consoleState.appState = .idle
-            consoleState.log("Reset from error state")
+            loop.interrupt()
         }
     }
 
     private func interruptConversation() {
-        audioManager.stopPlayback()
-        consoleState.isPlaying = false
-        consoleState.appState = .idle
-        consoleState.log("Interrupted")
+        conversationLoop?.interrupt()
     }
 }
 
