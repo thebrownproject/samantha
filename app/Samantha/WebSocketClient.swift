@@ -258,7 +258,7 @@ final class WebSocketClient: ObservableObject {
         message["protocol_version"] = wsProtocolVersion
         let data = try JSONSerialization.data(withJSONObject: message)
         guard let text = String(data: data, encoding: .utf8) else {
-            throw URLError(.cannotEncodeContentData)
+            throw URLError(.cannotParseResponse)
         }
         try await socketTask.send(.string(text))
     }
