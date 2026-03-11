@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from agents import Usage
+from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails
 
 from samantha.config import Config
 from samantha.tools import (
@@ -18,10 +20,13 @@ from samantha.tools import (
     _web_search,
     condense_for_voice,
     configure_tools,
+    estimate_usage_cost_usd,
     file_write,
     format_tool_error,
     register_tools,
+    resolve_pricing_model,
     safe_bash,
+    usage_telemetry_fields,
 )
 
 
@@ -400,8 +405,20 @@ async def test_reason_deeply_logs_success_telemetry(caplog):
     """Successful delegation emits start and success log messages with correlation ID, model, and duration."""
     import logging
 
-    mock_result = AsyncMock()
-    mock_result.final_output = "telemetry answer"
+    mock_result = SimpleNamespace(
+        final_output="telemetry answer",
+        last_response_id="resp_123",
+        context_wrapper=SimpleNamespace(
+            usage=Usage(
+                requests=1,
+                input_tokens=1000,
+                input_tokens_details=InputTokensDetails(cached_tokens=100),
+                output_tokens=200,
+                output_tokens_details=OutputTokensDetails(reasoning_tokens=50),
+                total_tokens=1200,
+            )
+        ),
+    )
     with (
         caplog.at_level(logging.INFO, logger="samantha.tools"),
         patch("samantha.tools.Runner.run", new_callable=AsyncMock, return_value=mock_result),
@@ -414,6 +431,14 @@ async def test_reason_deeply_logs_success_telemetry(caplog):
     assert "cid=" in log_text
     assert "model=" in log_text
     assert "duration=" in log_text
+    assert "response_id=resp_123" in log_text
+    assert "requests=1" in log_text
+    assert "input_tokens=1000" in log_text
+    assert "cached_input_tokens=100" in log_text
+    assert "output_tokens=200" in log_text
+    assert "reasoning_tokens=50" in log_text
+    assert "total_tokens=1200" in log_text
+    assert "est_cost_usd=0.000628" in log_text
 
 
 async def test_reason_deeply_logs_failure_telemetry(caplog):
@@ -432,3 +457,59 @@ async def test_reason_deeply_logs_failure_telemetry(caplog):
     assert "reason_deeply failure" in log_text
     assert "cid=" in log_text
     assert "duration=" in log_text
+    assert "failure_category=error" in log_text
+    assert "error_type=RuntimeError" in log_text
+
+
+async def test_reason_deeply_logs_timeout_category(caplog):
+    """Timeout path emits explicit timeout telemetry."""
+    import logging
+
+    configure_tools(Config(safe_mode=False, delegation_timeout=1, delegation_max_retries=0))
+
+    async def slow_run(*_args, **_kwargs):
+        await asyncio.sleep(10)
+
+    with (
+        caplog.at_level(logging.INFO, logger="samantha.tools"),
+        patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=slow_run),
+    ):
+        result = await _reason_deeply("slow task")
+
+    assert result == DELEGATION_FALLBACK
+    log_text = caplog.text
+    assert "reason_deeply timeout" in log_text
+    assert "failure_category=timeout" in log_text
+    assert "error_type=TimeoutError" in log_text
+
+
+def test_resolve_pricing_model_for_snapshot():
+    assert resolve_pricing_model("gpt-5-mini-2025-08-07") == "gpt-5-mini"
+
+
+def test_resolve_pricing_model_unknown():
+    assert resolve_pricing_model("unknown-model") is None
+
+
+def test_estimate_usage_cost_usd():
+    usage = Usage(
+        requests=1,
+        input_tokens=1000,
+        input_tokens_details=InputTokensDetails(cached_tokens=100),
+        output_tokens=200,
+        output_tokens_details=OutputTokensDetails(reasoning_tokens=50),
+        total_tokens=1200,
+    )
+    assert estimate_usage_cost_usd("gpt-5-mini-2025-08-07", usage) == pytest.approx(0.0006275)
+
+
+def test_usage_telemetry_fields_without_usage():
+    assert usage_telemetry_fields("gpt-5-mini-2025-08-07", None) == {
+        "requests": 0,
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "total_tokens": 0,
+        "est_cost_usd": "unknown",
+    }

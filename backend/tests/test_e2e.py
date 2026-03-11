@@ -10,6 +10,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
+from agents.realtime import RealtimeRunner
 from websockets.asyncio.client import connect
 
 from samantha.agents import create_voice_agent
@@ -23,6 +24,32 @@ from samantha.ws_server import ConnectionState, start_server
 
 def has_api_key():
     return bool(os.environ.get("OPENAI_API_KEY"))
+
+
+def _extract_assistant_text(items) -> str | None:
+    for item in reversed(items):
+        if getattr(item, "type", None) != "message":
+            continue
+        if getattr(item, "role", None) != "assistant":
+            continue
+
+        parts: list[str] = []
+        for entry in getattr(item, "content", []) or []:
+            entry_type = getattr(entry, "type", None)
+            text = None
+            if entry_type == "text":
+                text = getattr(entry, "text", None)
+            elif entry_type == "audio":
+                text = getattr(entry, "transcript", None)
+
+            cleaned = text.strip() if isinstance(text, str) else ""
+            if cleaned:
+                parts.append(cleaned)
+
+        if parts:
+            return " ".join(parts)
+
+    return None
 
 
 # -- Offline integration tests (no API key needed) --
@@ -196,3 +223,35 @@ async def test_web_search_smoke():
     configure_tools(cfg)
     result = await _web_search("OpenAI agents SDK Python")
     assert len(result) > 0
+
+
+@pytest.mark.e2e
+@pytest.mark.skipif(not has_api_key(), reason="OPENAI_API_KEY not set")
+async def test_realtime_session_smoke():
+    """Smoke test: send a text turn through the realtime session and receive audio + transcript."""
+    cfg = Config(safe_mode=False)
+    agent, runner_config = create_voice_agent(cfg)
+    runner = RealtimeRunner(starting_agent=agent, config=runner_config)
+
+    seen_audio = False
+    assistant_text = ""
+
+    async with await runner.run() as session:
+        await session.send_message("Reply with exactly the single word PONG.")
+        async with asyncio.timeout(30):
+            async for event in session:
+                if event.type == "audio":
+                    seen_audio = True
+                elif event.type == "history_updated":
+                    text = _extract_assistant_text(event.history)
+                    if text:
+                        assistant_text = text
+                elif event.type == "history_added":
+                    text = _extract_assistant_text([event.item])
+                    if text:
+                        assistant_text = text
+                elif event.type == "agent_end":
+                    break
+
+    assert seen_audio is True
+    assert "PONG" in assistant_text.upper()

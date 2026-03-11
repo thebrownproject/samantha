@@ -46,7 +46,13 @@ async def _run() -> None:
 
     # Start WebSocket server
     ws = await start_server(cfg)
-    runtime = RealtimeRuntime(cfg, ws, agent=agent, runner_config=runner_config)
+    runtime = RealtimeRuntime(
+        cfg,
+        ws,
+        agent=agent,
+        runner_config=runner_config,
+        memory_store=memory if cfg.memory_enabled else None,
+    )
     await runtime.start()
     logger.info("Samantha backend running on ws://%s:%d", cfg.ws_host, cfg.ws_port)
 

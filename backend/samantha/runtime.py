@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from collections.abc import Callable
@@ -13,6 +14,7 @@ from agents.realtime import RealtimeAgent, RealtimeModelSendRawMessage, Realtime
 from samantha.config import Config
 from samantha.events import AppState, EventDispatcher, msg_clear_playback
 from samantha.interruption import InterruptionHandler
+from samantha.memory import MemoryStore
 from samantha.session_manager import SessionManager
 from samantha.ws_server import WSServer
 
@@ -30,6 +32,7 @@ class RealtimeRuntime:
         agent: RealtimeAgent,
         runner_config: dict[str, Any],
         runner_factory: Callable[..., RealtimeRunner] = RealtimeRunner,
+        memory_store: MemoryStore | None = None,
         session_manager: SessionManager | None = None,
         require_api_key: bool = True,
     ) -> None:
@@ -39,6 +42,7 @@ class RealtimeRuntime:
         self._dispatcher = session_manager.dispatcher if session_manager else EventDispatcher()
         self._session_manager = session_manager or SessionManager(dispatcher=self._dispatcher)
         self._interruption = InterruptionHandler()
+        self._memory_store = memory_store
         self._require_api_key = require_api_key
 
         self._session: RealtimeSession | None = None
@@ -214,9 +218,11 @@ class RealtimeRuntime:
 
     def _on_transcript(self, msg: dict[str, Any]) -> None:
         self._spawn(self._ws.send_json(msg))
+        self._spawn(self._append_turn_log(msg))
 
     def _on_tool_event(self, msg: dict[str, Any]) -> None:
         self._spawn(self._ws.send_json(msg))
+        self._spawn(self._append_promotion_signal(msg))
 
     def _on_tool_approval(self, msg: dict[str, Any]) -> None:
         logger.info(
@@ -249,3 +255,54 @@ class RealtimeRuntime:
         for task in list(self._tasks):
             task.cancel()
         self._tasks.clear()
+
+    async def _append_turn_log(self, msg: dict[str, Any]) -> None:
+        if self._memory_store is None or not msg.get("final"):
+            return
+
+        text = str(msg.get("text", "")).strip()
+        role = str(msg.get("role", "")).strip()
+        if not text or not role:
+            return
+
+        await self._append_daily_log_entry({
+            "kind": "conversation_turn",
+            "role": role,
+            "text": text,
+            "final": True,
+        })
+
+    async def _append_promotion_signal(self, msg: dict[str, Any]) -> None:
+        if self._memory_store is None:
+            return
+        if msg.get("type") != "tool_start" or msg.get("name") != "memory_save":
+            return
+
+        args = msg.get("args")
+        if not isinstance(args, dict):
+            return
+
+        content = str(args.get("content", "")).strip()
+        tags = str(args.get("tags", "")).strip()
+        if not content:
+            return
+
+        payload: dict[str, Any] = {
+            "kind": "memory_promotion_signal",
+            "tool": "memory_save",
+            "content": content,
+        }
+        if tags:
+            payload["tags"] = tags
+
+        await self._append_daily_log_entry(payload)
+
+    async def _append_daily_log_entry(self, payload: dict[str, Any]) -> None:
+        if self._memory_store is None:
+            return
+        try:
+            await self._memory_store.append_daily_log(
+                json.dumps(payload, separators=(",", ":"), sort_keys=True),
+            )
+        except Exception:
+            logger.warning("Failed to append daily log entry", exc_info=True)

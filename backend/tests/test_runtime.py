@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -99,12 +100,21 @@ class FakeWSServer:
         self.json_messages.append({"type": "state_change", "state": str(state)})
 
 
+class FakeMemoryStore:
+    def __init__(self) -> None:
+        self.entries: list[str] = []
+
+    async def append_daily_log(self, entry: str) -> int:
+        self.entries.append(entry)
+        return len(self.entries)
+
+
 @pytest.fixture
 def cfg(tmp_path):
     return Config(data_dir=tmp_path / ".samantha")
 
 
-def _make_runtime(cfg: Config):
+def _make_runtime(cfg: Config, *, memory_store: FakeMemoryStore | None = None):
     ws = FakeWSServer()
     agent, runner_config = create_voice_agent(cfg)
     session = FakeSession()
@@ -115,6 +125,7 @@ def _make_runtime(cfg: Config):
         agent=agent,
         runner_config=runner_config,
         runner_factory=lambda **_: runner,
+        memory_store=memory_store,
         require_api_key=False,
     )
     return runtime, ws, session, runner
@@ -248,5 +259,70 @@ async def test_runtime_forwards_session_events_to_websocket(cfg):
     assert {"type": "error", "message": "boom"} in ws.json_messages
     assert {"type": "state_change", "state": "speaking"} in ws.json_messages
     assert {"type": "state_change", "state": "listening"} in ws.json_messages
+
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_runtime_appends_daily_log_entries_for_turns_and_memory_signals(cfg):
+    memory_store = FakeMemoryStore()
+    runtime, _ws, session, _runner = _make_runtime(cfg, memory_store=memory_store)
+
+    await runtime.handle_start_listening()
+    await session.push(
+        SimpleNamespace(
+            type="history_added",
+            item=SimpleNamespace(
+                item_id="user_1",
+                type="message",
+                role="user",
+                content=[SimpleNamespace(type="input_text", text="I prefer tea in the morning")],
+            ),
+        )
+    )
+    await session.push(
+        SimpleNamespace(
+            type="tool_start",
+            tool=SimpleNamespace(name="memory_save"),
+            arguments='{"content": "Fraser prefers tea in the morning", "tags": "preference"}',
+        )
+    )
+    await session.push(
+        SimpleNamespace(
+            type="history_updated",
+            history=[
+                SimpleNamespace(
+                    item_id="assistant_1",
+                    type="message",
+                    role="assistant",
+                    status="completed",
+                    content=[SimpleNamespace(type="audio", transcript="I will remember that.")],
+                )
+            ],
+        )
+    )
+    await asyncio.sleep(0.1)
+
+    entries = [json.loads(entry) for entry in memory_store.entries]
+    assert entries == [
+        {
+            "final": True,
+            "kind": "conversation_turn",
+            "role": "user",
+            "text": "I prefer tea in the morning",
+        },
+        {
+            "content": "Fraser prefers tea in the morning",
+            "kind": "memory_promotion_signal",
+            "tags": "preference",
+            "tool": "memory_save",
+        },
+        {
+            "final": True,
+            "kind": "conversation_turn",
+            "role": "assistant",
+            "text": "I will remember that.",
+        },
+    ]
 
     await runtime.stop()

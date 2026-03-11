@@ -35,21 +35,24 @@ PY
 
 1. Live API smoke test for `reason_deeply`
 2. Live API smoke test for `web_search`
-3. Full backend entrypoint startup (`samantha.main`)
-4. Lazy realtime-session startup on first websocket interaction
-5. Live websocket connection to the running backend
-6. Runtime control-message handling:
+3. Live realtime-session smoke test through `RealtimeRunner`
+4. Full backend entrypoint startup (`samantha.main`)
+5. Lazy realtime-session startup on first websocket interaction
+6. Live websocket connection to the running backend
+7. Runtime control-message handling:
    - `start_listening`
    - `inject_context`
    - `get_state`
    - `stop_listening`
-7. Graceful shutdown via interrupt signal
-8. App-level e2e feasibility check (blocked)
+8. Graceful shutdown via interrupt signal
+9. App-level e2e feasibility check (blocked)
 
 ## Pass / Fail Results
 
 - `pytest -q -m e2e`: pass
-  - Result: `2 passed, 271 deselected in 14.29s`
+  - Result: `3 passed, 277 deselected in 17.82s`
+- Live realtime-session smoke: pass
+  - `test_realtime_session_smoke` sent a text turn through `RealtimeRunner` and verified assistant transcript content plus streamed audio
 - Backend runtime startup: pass
   - Startup logs confirmed memory initialization, MCP skip on non-macOS, agent readiness, websocket bind, realtime-session connection, and clean shutdown
 - Live websocket smoke against runtime server: pass
@@ -79,6 +82,7 @@ PY
 - Added a live backend realtime runtime that creates and manages `RealtimeRunner` / `RealtimeSession`.
 - Added websocket-to-realtime bridging for control messages, transcripts, audio, interruptions, and approval requests.
 - Added websocket approval commands (`approve_tool_call`, `reject_tool_call`) and backend approval logging.
+- Added live realtime e2e coverage for a text turn through the realtime session.
 
 ## Residual Issues
 

@@ -9,10 +9,11 @@ import re
 import shlex
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import openai
-from agents import Agent, Runner, function_tool
+from agents import Agent, Runner, Usage, function_tool
 
 from samantha.config import Config
 from samantha.memory import MemoryStore
@@ -178,8 +179,79 @@ DELEGATION_FALLBACK = (
     "Let me try to help directly."
 )
 
-
 MAX_BACKOFF_DELAY = 30.0
+
+
+@dataclass(frozen=True, slots=True)
+class ModelPricing:
+    input_per_million_usd: float
+    cached_input_per_million_usd: float
+    output_per_million_usd: float
+
+
+DELEGATION_MODEL_PRICING: dict[str, ModelPricing] = {
+    # Official OpenAI API pricing as of 2026-03-11.
+    "gpt-5-mini": ModelPricing(
+        input_per_million_usd=0.250,
+        cached_input_per_million_usd=0.025,
+        output_per_million_usd=2.000,
+    ),
+}
+
+
+def resolve_pricing_model(model_name: str) -> str | None:
+    for base_model in DELEGATION_MODEL_PRICING:
+        if model_name == base_model or model_name.startswith(f"{base_model}-"):
+            return base_model
+    return None
+
+
+def estimate_usage_cost_usd(model_name: str, usage: Usage | None) -> float | None:
+    if usage is None:
+        return None
+
+    pricing_key = resolve_pricing_model(model_name)
+    if pricing_key is None:
+        return None
+
+    pricing = DELEGATION_MODEL_PRICING[pricing_key]
+    input_tokens = max(usage.input_tokens or 0, 0)
+    cached_input_tokens = min(
+        max(usage.input_tokens_details.cached_tokens or 0, 0),
+        input_tokens,
+    )
+    billable_input_tokens = max(input_tokens - cached_input_tokens, 0)
+    output_tokens = max(usage.output_tokens or 0, 0)
+
+    return (
+        billable_input_tokens * pricing.input_per_million_usd
+        + cached_input_tokens * pricing.cached_input_per_million_usd
+        + output_tokens * pricing.output_per_million_usd
+    ) / 1_000_000
+
+
+def usage_telemetry_fields(model_name: str, usage: Usage | None) -> dict[str, int | str]:
+    if usage is None:
+        return {
+            "requests": 0,
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+            "est_cost_usd": "unknown",
+        }
+
+    cost = estimate_usage_cost_usd(model_name, usage)
+    return {
+        "requests": usage.requests or 0,
+        "input_tokens": usage.input_tokens or 0,
+        "cached_input_tokens": usage.input_tokens_details.cached_tokens or 0,
+        "output_tokens": usage.output_tokens or 0,
+        "reasoning_tokens": usage.output_tokens_details.reasoning_tokens or 0,
+        "total_tokens": usage.total_tokens or 0,
+        "est_cost_usd": "unknown" if cost is None else f"{cost:.6f}",
+    }
 
 
 async def _reason_deeply(task: str) -> str:
@@ -203,31 +275,63 @@ async def _reason_deeply(task: str) -> str:
                 timeout=_cfg.delegation_timeout,
             )
             output = str(result.final_output)
+            usage = getattr(result.context_wrapper, "usage", None)
+            telemetry = usage_telemetry_fields(model, usage if isinstance(usage, Usage) else None)
             if len(output) > MAX_DELEGATION_OUTPUT:
                 output = output[:MAX_DELEGATION_OUTPUT] + "..."
             duration = time.monotonic() - t_start
             logger.info(
-                "reason_deeply success cid=%s model=%s duration=%.2fs",
-                correlation_id, model, duration,
+                "reason_deeply success cid=%s model=%s duration=%.2fs response_id=%s requests=%d "
+                "input_tokens=%d cached_input_tokens=%d output_tokens=%d reasoning_tokens=%d "
+                "total_tokens=%d est_cost_usd=%s",
+                correlation_id,
+                model,
+                duration,
+                result.last_response_id or "-",
+                telemetry["requests"],
+                telemetry["input_tokens"],
+                telemetry["cached_input_tokens"],
+                telemetry["output_tokens"],
+                telemetry["reasoning_tokens"],
+                telemetry["total_tokens"],
+                telemetry["est_cost_usd"],
             )
             return condense_for_voice(output)
         except TimeoutError:
             last_err = TimeoutError(
                 f"delegation timed out after {_cfg.delegation_timeout}s"
             )
-            logger.warning("reason_deeply timeout (attempt %d/%d)", attempt + 1, attempts)
+            logger.warning(
+                "reason_deeply timeout cid=%s model=%s attempt=%d/%d failure_category=timeout",
+                correlation_id,
+                model,
+                attempt + 1,
+                attempts,
+            )
         except Exception as exc:
             last_err = exc
             logger.warning(
-                "reason_deeply error (attempt %d/%d): %s", attempt + 1, attempts, exc,
+                "reason_deeply error cid=%s model=%s attempt=%d/%d failure_category=error "
+                "error_type=%s error=%s",
+                correlation_id,
+                model,
+                attempt + 1,
+                attempts,
+                type(exc).__name__,
+                exc,
             )
         if attempt < attempts - 1:
             await asyncio.sleep(min(1.0 * (2 ** attempt), MAX_BACKOFF_DELAY))
 
     duration = time.monotonic() - t_start
     logger.error(
-        "reason_deeply failure cid=%s model=%s duration=%.2fs error=%s",
-        correlation_id, model, duration, last_err,
+        "reason_deeply failure cid=%s model=%s duration=%.2fs failure_category=%s error_type=%s error=%s",
+        correlation_id,
+        model,
+        duration,
+        "timeout" if isinstance(last_err, TimeoutError) else "error",
+        type(last_err).__name__ if last_err is not None else "UnknownError",
+        last_err,
     )
     return DELEGATION_FALLBACK
 
