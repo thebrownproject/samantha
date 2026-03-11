@@ -33,11 +33,13 @@ def dispatcher():
 
 # -- AppState enum --
 
+
 def test_app_state_values():
     assert set(AppState) == {"idle", "listening", "thinking", "speaking", "error"}
 
 
 # -- JSON message builders --
+
 
 def test_msg_state_change():
     assert msg_state_change(AppState.SPEAKING) == _msg("state_change", state="speaking")
@@ -91,6 +93,7 @@ def test_msg_error():
 
 # -- EventDispatcher state transitions --
 
+
 def test_initial_state(dispatcher):
     assert dispatcher.state == AppState.IDLE
 
@@ -138,9 +141,7 @@ def test_error_transitions_to_error(dispatcher):
 
 def test_raw_speech_started_transitions_to_listening(dispatcher):
     dispatcher.handle_event(_evt("audio", data=b"\x00"))
-    dispatcher.handle_event(
-        _evt("raw_model_event", data={"type": "input_audio_buffer.speech_started"})
-    )
+    dispatcher.handle_event(_evt("raw_model_event", data={"type": "input_audio_buffer.speech_started"}))
     assert dispatcher.state == AppState.LISTENING
 
 
@@ -175,6 +176,7 @@ def test_event_missing_type_ignored(dispatcher):
 
 # -- Duplicate state suppression --
 
+
 def test_duplicate_state_suppressed(dispatcher):
     states = []
     dispatcher.on_state_change(states.append)
@@ -194,6 +196,7 @@ def test_state_change_emits_on_actual_change(dispatcher):
 
 
 # -- Callback invocation --
+
 
 def test_on_state_change_callback(dispatcher):
     received = []
@@ -264,14 +267,13 @@ def test_multiple_callbacks(dispatcher):
 
 # -- Full sequence: realistic event flow --
 
+
 def test_full_conversation_flow(dispatcher):
     states = []
     dispatcher.on_state_change(states.append)
 
     # User speaks -> assistant responds -> user interrupts -> assistant resumes
-    dispatcher.handle_event(
-        _evt("raw_model_event", data={"type": "input_audio_buffer.speech_started"})
-    )
+    dispatcher.handle_event(_evt("raw_model_event", data={"type": "input_audio_buffer.speech_started"}))
     dispatcher.handle_event(_evt("audio", data=b"\x00"))
     dispatcher.handle_event(_evt("audio", data=b"\x01"))
     dispatcher.handle_event(_evt("audio_interrupted"))
@@ -290,6 +292,7 @@ def test_full_conversation_flow(dispatcher):
 
 
 # -- normalize_transcript --
+
 
 def test_normalize_strips_whitespace():
     result = normalize_transcript("  hello world  ", "user", final=True)
@@ -336,6 +339,7 @@ def test_normalize_assistant_role():
 
 # -- EventDispatcher.emit_transcript --
 
+
 def test_emit_transcript_fires_callbacks(dispatcher):
     received = []
     dispatcher.on_transcript(received.append)
@@ -368,9 +372,7 @@ def test_history_added_emits_user_transcript(dispatcher):
         content=[SimpleNamespace(type="input_text", text="hello from user")],
     )
     dispatcher.handle_event(_evt("history_added", item=item))
-    assert received == [
-        _msg("transcript", role="user", text="hello from user", final=True)
-    ]
+    assert received == [_msg("transcript", role="user", text="hello from user", final=True)]
 
 
 def test_history_updated_emits_assistant_partial_then_final(dispatcher):

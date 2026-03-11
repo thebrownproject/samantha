@@ -96,26 +96,39 @@ async def _safe_bash(command: str) -> str:
     if _is_dangerous(command):
         return format_tool_error("bash", "dangerous command pattern detected")
 
+    proc: asyncio.subprocess.Process | None = None
     if _cfg.safe_mode:
         try:
-            base_cmd = shlex.split(command)[0]
+            parts = shlex.split(command)
         except ValueError:
             return format_tool_error("bash", "malformed command")
-        base_cmd = Path(base_cmd).name
+        if not parts:
+            return format_tool_error("bash", "command is empty")
+        base_cmd = Path(parts[0]).name
         if not _cfg.bash_allowlist:
             return format_tool_error("bash", "bash_allowlist is empty in safe mode")
         if base_cmd not in _cfg.bash_allowlist:
             return format_tool_error("bash", f"'{base_cmd}' not in bash allowlist")
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        )
+        if _cfg.safe_mode:
+            proc = await asyncio.create_subprocess_exec(
+                *parts,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
     except TimeoutError:
-        with contextlib.suppress(ProcessLookupError):
-            proc.kill()
-            await proc.wait()
+        if proc is not None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+                await proc.wait()
         return format_tool_error("bash", "command timed out after 30s")
     except OSError as e:
         return format_tool_error("bash", str(e))
@@ -181,10 +194,7 @@ async def file_write(path: str, content: str) -> str:
 
 
 MAX_DELEGATION_OUTPUT = 2048
-DELEGATION_FALLBACK = (
-    "I wasn't able to think that through deeply right now. "
-    "Let me try to help directly."
-)
+DELEGATION_FALLBACK = "I wasn't able to think that through deeply right now. Let me try to help directly."
 
 MAX_BACKOFF_DELAY = 30.0
 DEFAULT_DISPLAY_PROMPT = (
@@ -309,9 +319,7 @@ async def _reason_deeply(task: str) -> str:
             )
             return condense_for_voice(output)
         except TimeoutError:
-            last_err = TimeoutError(
-                f"delegation timed out after {_cfg.delegation_timeout}s"
-            )
+            last_err = TimeoutError(f"delegation timed out after {_cfg.delegation_timeout}s")
             logger.warning(
                 "reason_deeply timeout cid=%s model=%s attempt=%d/%d failure_category=timeout",
                 correlation_id,
@@ -322,8 +330,7 @@ async def _reason_deeply(task: str) -> str:
         except Exception as exc:
             last_err = exc
             logger.warning(
-                "reason_deeply error cid=%s model=%s attempt=%d/%d failure_category=error "
-                "error_type=%s error=%s",
+                "reason_deeply error cid=%s model=%s attempt=%d/%d failure_category=error error_type=%s error=%s",
                 correlation_id,
                 model,
                 attempt + 1,
@@ -332,7 +339,7 @@ async def _reason_deeply(task: str) -> str:
                 exc,
             )
         if attempt < attempts - 1:
-            await asyncio.sleep(min(1.0 * (2 ** attempt), MAX_BACKOFF_DELAY))
+            await asyncio.sleep(min(1.0 * (2**attempt), MAX_BACKOFF_DELAY))
 
     duration = time.monotonic() - t_start
     logger.error(
@@ -483,13 +490,15 @@ async def _capture_display(question: str = "") -> str:
     try:
         response = await _get_openai_client().responses.create(
             model="gpt-4o-mini",
-            input=[{
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": prompt},
-                    {"type": "input_image", "image_url": f"data:{mime_type};base64,{image_base64}"},
-                ],
-            }],
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": prompt},
+                        {"type": "input_image", "image_url": f"data:{mime_type};base64,{image_base64}"},
+                    ],
+                }
+            ],
         )
         summary = _extract_response_text(response)
     except Exception as exc:
@@ -588,7 +597,15 @@ def register_tools(config: Config | None = None) -> list:
     if config:
         configure_tools(config)
     return [
-        safe_bash, file_read, file_write, reason_deeply, web_search,
-        frontmost_app_context, capture_display,
-        memory_save, memory_search, daily_log_append, daily_log_search,
+        safe_bash,
+        file_read,
+        file_write,
+        reason_deeply,
+        web_search,
+        frontmost_app_context,
+        capture_display,
+        memory_save,
+        memory_search,
+        daily_log_append,
+        daily_log_search,
     ]

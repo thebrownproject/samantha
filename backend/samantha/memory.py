@@ -14,8 +14,10 @@ import sqlite_vec
 DEFAULT_DB_PATH = Path.home() / ".samantha" / "memory.db"
 
 MIGRATIONS: list[tuple[int, list[str]]] = [
-    (1, [
-        """CREATE TABLE IF NOT EXISTS memories (
+    (
+        1,
+        [
+            """CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY,
             content TEXT NOT NULL,
             tags TEXT,
@@ -23,34 +25,38 @@ MIGRATIONS: list[tuple[int, list[str]]] = [
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
-        """CREATE TABLE IF NOT EXISTS daily_logs (
+            """CREATE TABLE IF NOT EXISTS daily_logs (
             id INTEGER PRIMARY KEY,
             date TEXT NOT NULL,
             entry TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
-    ]),
-    (2, [
-        """CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
+        ],
+    ),
+    (
+        2,
+        [
+            """CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
             USING fts5(content, tags, content=memories, content_rowid=id)""",
-        # Keep FTS in sync with memories table
-        """CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+            # Keep FTS in sync with memories table
+            """CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
             INSERT INTO memories_fts(rowid, content, tags)
             VALUES (new.id, new.content, new.tags);
         END""",
-        """CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+            """CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
             INSERT INTO memories_fts(memories_fts, rowid, content, tags)
             VALUES ('delete', old.id, old.content, old.tags);
         END""",
-        """CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+            """CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
             INSERT INTO memories_fts(memories_fts, rowid, content, tags)
             VALUES ('delete', old.id, old.content, old.tags);
             INSERT INTO memories_fts(rowid, content, tags)
             VALUES (new.id, new.content, new.tags);
         END""",
-        """CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings
+            """CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings
             USING vec0(memory_id INTEGER PRIMARY KEY, embedding float[384])""",
-    ]),
+        ],
+    ),
 ]
 
 
@@ -115,18 +121,24 @@ class MemoryStore:
     def _get_model(self):
         if self._model is None:
             from sentence_transformers import SentenceTransformer
+
             self._model = SentenceTransformer("all-MiniLM-L6-v2")
         return self._model
 
     async def encode(self, text: str) -> list[float]:
         """Encode text into an embedding vector."""
+
         def _encode_sync():
             model = self._get_model()
             return model.encode(text).tolist()
+
         return await asyncio.to_thread(_encode_sync)
 
     async def save(
-        self, content: str, tags: str | None = None, source: str | None = None,
+        self,
+        content: str,
+        tags: str | None = None,
+        source: str | None = None,
     ) -> int:
         """Save a memory entry with deduplication. Returns the entry ID."""
         embedding = await self.encode(content)
@@ -150,7 +162,8 @@ class MemoryStore:
                         (content, tags, source, existing_id),
                     )
                     self.conn.execute(
-                        "DELETE FROM memory_embeddings WHERE memory_id = ?", (existing_id,),
+                        "DELETE FROM memory_embeddings WHERE memory_id = ?",
+                        (existing_id,),
                     )
                     self.conn.execute(
                         "INSERT INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
@@ -178,6 +191,9 @@ class MemoryStore:
 
     async def search(self, query: str, limit: int = 10) -> list[dict]:
         """Search memories by hybrid FTS5 + vector similarity. Returns ranked results."""
+        if not query.strip():
+            return []
+
         embedding = await self.encode(query)
         raw_vec = _serialize_f32(embedding)
         # Sanitize query for FTS5: strip special chars, quote each token
@@ -249,14 +265,16 @@ class MemoryStore:
 
             results = []
             for row in rows:
-                results.append({
-                    "id": row[0],
-                    "content": row[1],
-                    "tags": row[2],
-                    "source": row[3],
-                    "score": round(score_map.get(row[0], 0.0), 4),
-                    "created_at": row[4],
-                })
+                results.append(
+                    {
+                        "id": row[0],
+                        "content": row[1],
+                        "tags": row[2],
+                        "source": row[3],
+                        "score": round(score_map.get(row[0], 0.0), 4),
+                        "created_at": row[4],
+                    }
+                )
             results.sort(key=lambda x: x["score"], reverse=True)
             return results
 
@@ -288,19 +306,19 @@ class MemoryStore:
                 "SELECT id, date, entry, created_at FROM daily_logs WHERE date = ? ORDER BY id",
                 (date_str,),
             ).fetchall()
-            return [
-                {"id": r[0], "date": r[1], "entry": r[2], "created_at": r[3]}
-                for r in rows
-            ]
+            return [{"id": r[0], "date": r[1], "entry": r[2], "created_at": r[3]} for r in rows]
 
         return await asyncio.to_thread(_get_sync)
 
     async def promote_to_memory(self, daily_log_id: int, tags: str = "") -> int:
         """Promote a daily log entry to permanent memory. Returns the new memory ID."""
+
         def _fetch_entry():
             return self.conn.execute(
-                "SELECT entry FROM daily_logs WHERE id = ?", (daily_log_id,),
+                "SELECT entry FROM daily_logs WHERE id = ?",
+                (daily_log_id,),
             ).fetchone()
+
         row = await asyncio.to_thread(_fetch_entry)
         if row is None:
             raise ValueError(f"Daily log entry {daily_log_id} not found")

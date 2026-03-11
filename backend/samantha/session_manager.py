@@ -70,7 +70,7 @@ class SessionManager:
         return self._reconnect_count
 
     def _calc_delay(self, attempt: int) -> float:
-        return min(self._base_delay * (2 ** attempt), self._max_delay)
+        return min(self._base_delay * (2**attempt), self._max_delay)
 
     async def start(self, runner: Runner) -> None:
         """Start (or restart) the session with the given runner."""

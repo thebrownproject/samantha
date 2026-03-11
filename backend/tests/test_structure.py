@@ -9,8 +9,14 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 def test_backend_samantha_modules():
     pkg = BACKEND_ROOT / "samantha"
     expected = [
-        "__init__.py", "main.py", "agents.py", "tools.py",
-        "memory.py", "ws_server.py", "config.py", "prompts.py",
+        "__init__.py",
+        "main.py",
+        "agents.py",
+        "tools.py",
+        "memory.py",
+        "ws_server.py",
+        "config.py",
+        "prompts.py",
         "runtime.py",
     ]
     for f in expected:

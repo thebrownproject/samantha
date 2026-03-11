@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from samantha.config import Config, ensure_data_dir, load_config, save_config
+from samantha.config import Config, ensure_data_dir, load_config, save_config, update_config
 
 
 def test_default_values():
@@ -40,6 +40,7 @@ def test_load_missing_file_returns_defaults(tmp_path):
     cfg = load_config(tmp_path / "nonexistent.json")
     assert cfg.voice == "ash"
     assert cfg.ws_port == 9090
+    assert cfg.data_dir == tmp_path
 
 
 def test_invalid_port():
@@ -104,3 +105,21 @@ def test_to_dict():
 def test_config_path_property(tmp_path):
     cfg = Config(data_dir=tmp_path)
     assert cfg.config_path == tmp_path / "config.json"
+
+
+def test_update_config_persists_runtime_fields(tmp_path):
+    config_path = tmp_path / "config.json"
+    updated = update_config(config_path, voice="coral", safe_mode=False, memory_enabled=False)
+    assert updated.voice == "coral"
+    assert updated.safe_mode is False
+    assert updated.memory_enabled is False
+
+    loaded = load_config(config_path)
+    assert loaded.voice == "coral"
+    assert loaded.safe_mode is False
+    assert loaded.memory_enabled is False
+
+
+def test_update_config_rejects_unknown_fields(tmp_path):
+    with pytest.raises(ValueError, match="Unsupported config update fields"):
+        update_config(tmp_path / "config.json", ws_port=8080)

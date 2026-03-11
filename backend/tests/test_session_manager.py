@@ -43,6 +43,7 @@ def manager(dispatcher):
 
 # -- Lifecycle --
 
+
 class TestLifecycle:
     async def test_start_sets_connected(self, manager):
         runner = FakeRunner()
@@ -76,6 +77,7 @@ class TestLifecycle:
 
 # -- Reconnect with exponential backoff --
 
+
 class TestReconnect:
     async def test_reconnect_on_disconnect(self, manager, dispatcher):
         """Session drop triggers reconnect and emits error then idle."""
@@ -105,13 +107,17 @@ class TestReconnect:
 
     async def test_backoff_caps_at_max(self):
         mgr = SessionManager(
-            dispatcher=EventDispatcher(), max_retries=5, base_delay=10.0, max_delay=30.0,
+            dispatcher=EventDispatcher(),
+            max_retries=5,
+            base_delay=10.0,
+            max_delay=30.0,
         )
         # 10 * 2^3 = 80, capped to 30
         assert mgr._calc_delay(3) == 30.0
 
 
 # -- Max retries exceeded --
+
 
 class TestMaxRetries:
     async def test_gives_up_after_max_retries(self, dispatcher):
@@ -131,6 +137,7 @@ class TestMaxRetries:
 
 
 # -- State emissions during reconnect --
+
 
 class TestStateEmissions:
     async def test_error_emitted_on_disconnect(self, manager, dispatcher):
@@ -154,7 +161,7 @@ class TestStateEmissions:
 
         # After error, should recover to idle
         error_idx = states.index(AppState.ERROR)
-        remaining = states[error_idx + 1:]
+        remaining = states[error_idx + 1 :]
         assert AppState.IDLE in remaining
         await manager.stop()
 
@@ -185,10 +192,14 @@ class TestStateEmissions:
 
 # -- Health check --
 
+
 class TestHealthCheck:
     async def test_health_check_runs_periodically(self, dispatcher):
         mgr = SessionManager(
-            dispatcher=dispatcher, max_retries=3, base_delay=0.01, health_interval=0.05,
+            dispatcher=dispatcher,
+            max_retries=3,
+            base_delay=0.01,
+            health_interval=0.05,
         )
         runner = FakeRunner()
         await mgr.start(runner)
@@ -198,7 +209,10 @@ class TestHealthCheck:
 
     async def test_health_check_stops_on_stop(self, dispatcher):
         mgr = SessionManager(
-            dispatcher=dispatcher, max_retries=3, base_delay=0.01, health_interval=0.05,
+            dispatcher=dispatcher,
+            max_retries=3,
+            base_delay=0.01,
+            health_interval=0.05,
         )
         runner = FakeRunner()
         await mgr.start(runner)

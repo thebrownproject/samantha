@@ -46,6 +46,7 @@ def _msg(msg_type: str, **payload) -> str:
 
 # -- Server lifecycle --
 
+
 @pytest.mark.asyncio
 async def test_server_starts_and_accepts_connection(server):
     async with connect(_uri(server)):
@@ -70,6 +71,7 @@ async def test_single_connection_only(server):
 
 # -- Text message routing --
 
+
 @pytest.mark.asyncio
 async def test_start_listening(server):
     async with connect(_uri(server)) as ws:
@@ -93,6 +95,21 @@ async def test_set_voice(server, config):
         await ws.send(_msg("set_voice", voice="coral"))
         await asyncio.sleep(0.05)
         assert config.voice == "coral"
+
+
+@pytest.mark.asyncio
+async def test_set_voice_invokes_handler(server):
+    seen: list[str] = []
+
+    async def handler(voice: str) -> None:
+        seen.append(voice)
+
+    server.voice_changed_handler = handler
+
+    async with connect(_uri(server)) as ws:
+        await ws.send(_msg("set_voice", voice="coral"))
+        await asyncio.sleep(0.05)
+        assert seen == ["coral"]
 
 
 @pytest.mark.asyncio
@@ -208,6 +225,7 @@ async def test_unsupported_protocol_version(server):
 
 # -- Binary message handling --
 
+
 @pytest.mark.asyncio
 async def test_binary_forwarded_when_listening(server):
     received: list[bytes] = []
@@ -236,6 +254,7 @@ async def test_binary_dropped_when_not_listening(server):
 
 
 # -- Outgoing messages --
+
 
 @pytest.mark.asyncio
 async def test_send_text_message(server):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -13,7 +14,7 @@ from typing import Any
 
 from agents.realtime import RealtimeAgent, RealtimeModelSendRawMessage, RealtimeRunner, RealtimeSession
 
-from samantha.config import Config
+from samantha.config import Config, save_config
 from samantha.events import AppState, EventDispatcher, msg_clear_playback
 from samantha.interruption import InterruptionHandler
 from samantha.memory import MemoryStore
@@ -40,7 +41,10 @@ class RealtimeRuntime:
     ) -> None:
         self._cfg = cfg
         self._ws = ws
-        self._runner = runner_factory(starting_agent=agent, config=runner_config)
+        self._agent = agent
+        self._runner_factory = runner_factory
+        self._runner_config = copy.deepcopy(runner_config)
+        self._runner = self._new_runner()
         self._dispatcher = session_manager.dispatcher if session_manager else EventDispatcher()
         self._session_manager = session_manager or SessionManager(dispatcher=self._dispatcher)
         self._interruption = InterruptionHandler()
@@ -58,6 +62,7 @@ class RealtimeRuntime:
         self._active_turn_id: str | None = None
         self._turn_started_at = 0.0
         self._first_audio_latency: float | None = None
+        self._restart_session_before_next_use = False
         self._tasks: set[asyncio.Task[Any]] = set()
 
         self._interruption.wire(self._dispatcher)
@@ -78,10 +83,17 @@ class RealtimeRuntime:
         if self._require_api_key and not os.environ.get("OPENAI_API_KEY"):
             raise RuntimeError("OPENAI_API_KEY is not set")
 
-        if self._session is not None:
-            return
-
         async with self._ensure_lock:
+            if self._restart_session_before_next_use:
+                await self._session_manager.stop()
+                self._session = None
+                self._session_ready.clear()
+                self._restart_session_before_next_use = False
+                logger.info("Realtime session will restart with updated runtime settings")
+
+            if self._session is not None:
+                return
+
             if self._session is None and (not self._started or not self._session_manager.is_running):
                 self._session_ready.clear()
                 self._started = True
@@ -175,6 +187,20 @@ class RealtimeRuntime:
         logger.info("Rejecting tool call %s (always=%s)", call_id, always)
         await session.reject_tool_call(call_id, always=always)
 
+    async def handle_voice_changed(self, voice: str) -> None:
+        if voice == self._cfg.voice:
+            return
+
+        self._cfg.voice = voice
+        save_config(self._cfg)
+        output_config = (
+            self._runner_config.setdefault("model_settings", {}).setdefault("audio", {}).setdefault("output", {})
+        )
+        output_config["voice"] = voice
+        self._runner = self._new_runner()
+        self._restart_session_before_next_use = True
+        logger.info("Voice updated to %s; change will apply on the next realtime session", voice)
+
     def _wire_dispatcher(self) -> None:
         self._dispatcher.on_state_change(self._on_state_change)
         self._dispatcher.on_transcript(self._on_transcript)
@@ -189,6 +215,7 @@ class RealtimeRuntime:
         self._ws.stop_listening_handler = self.handle_stop_listening
         self._ws.interrupt_handler = self.handle_interrupt
         self._ws.inject_context_handler = self.handle_inject_context
+        self._ws.voice_changed_handler = self.handle_voice_changed
         self._ws.approve_tool_call_handler = self.handle_approve_tool_call
         self._ws.reject_tool_call_handler = self.handle_reject_tool_call
 
@@ -232,6 +259,9 @@ class RealtimeRuntime:
         if other_data:
             payload["other_data"] = other_data
         await session.model.send_event(RealtimeModelSendRawMessage(message=payload))
+
+    def _new_runner(self) -> RealtimeRunner:
+        return self._runner_factory(starting_agent=self._agent, config=self._runner_config)
 
     def _on_state_change(self, state: AppState) -> None:
         if state in {AppState.IDLE, AppState.ERROR}:
@@ -288,12 +318,14 @@ class RealtimeRuntime:
         if not text or not role:
             return
 
-        await self._append_daily_log_entry({
-            "kind": "conversation_turn",
-            "role": role,
-            "text": text,
-            "final": True,
-        })
+        await self._append_daily_log_entry(
+            {
+                "kind": "conversation_turn",
+                "role": role,
+                "text": text,
+                "final": True,
+            }
+        )
 
     async def _append_promotion_signal(self, msg: dict[str, Any]) -> None:
         if self._memory_store is None:

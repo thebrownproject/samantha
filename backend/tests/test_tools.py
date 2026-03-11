@@ -47,6 +47,7 @@ def _reset_config(tmp_path):
 
 # -- safe_bash --
 
+
 async def test_bash_echo():
     result = await _safe_bash("echo hello")
     assert "hello" in result
@@ -86,6 +87,12 @@ async def test_bash_allowlist_allows():
     assert "allowed" in result
 
 
+async def test_bash_allowlist_treats_shell_chaining_as_literal_args():
+    configure_tools(Config(safe_mode=True, bash_allowlist=["echo"]))
+    result = await _safe_bash("echo allowed; printf injected")
+    assert result.strip() == "allowed; printf injected"
+
+
 async def test_bash_empty_allowlist():
     configure_tools(Config(safe_mode=True, bash_allowlist=[]))
     result = await _safe_bash("echo test")
@@ -94,6 +101,7 @@ async def test_bash_empty_allowlist():
 
 
 # -- file_read --
+
 
 async def test_read_existing_file(tmp_path):
     f = tmp_path / "hello.txt"
@@ -126,6 +134,7 @@ async def test_read_directory(tmp_path):
 
 
 # -- file_write --
+
 
 async def test_write_creates_file(tmp_path):
     f = tmp_path / "out.txt"
@@ -167,6 +176,7 @@ async def test_write_safe_mode_blocks_outside_home():
 
 # -- register_tools --
 
+
 def test_register_tools_returns_all():
     tools = register_tools()
     assert len(tools) == 11
@@ -203,6 +213,7 @@ def test_visual_context_tool_wrappers_are_named():
 
 
 # -- reason_deeply --
+
 
 async def test_reason_deeply_returns_string():
     mock_result = AsyncMock()
@@ -247,7 +258,9 @@ async def test_reason_deeply_retry_then_succeed():
     mock_result = AsyncMock()
     mock_result.final_output = "recovered answer"
     with (
-        patch("samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=[RuntimeError("transient"), mock_result]),
+        patch(
+            "samantha.tools.Runner.run", new_callable=AsyncMock, side_effect=[RuntimeError("transient"), mock_result]
+        ),
         patch("samantha.tools.asyncio.sleep", new_callable=AsyncMock),
     ):
         result = await _reason_deeply("retry task")
@@ -267,6 +280,7 @@ async def test_reason_deeply_all_retries_exhausted():
 
 
 # -- needs_approval / confirm_destructive --
+
 
 async def test_needs_approval_true_when_confirm_destructive():
     configure_tools(Config(safe_mode=False, confirm_destructive=True))
@@ -288,6 +302,7 @@ def test_file_write_has_needs_approval():
 
 # -- web_search --
 
+
 async def test_web_search_returns_results():
     annotation = SimpleNamespace(type="url_citation", url="https://example.com", title="Example")
     text_block = SimpleNamespace(type="output_text", text="Here are results.", annotations=[annotation])
@@ -295,6 +310,7 @@ async def test_web_search_returns_results():
     mock_response = SimpleNamespace(output=[message_item])
 
     import samantha.tools as _tools_mod
+
     _tools_mod._openai_client = None  # reset singleton so mock takes effect
     with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
         mock_client = MagicMock()
@@ -313,6 +329,7 @@ async def test_web_search_returns_results():
 
 async def test_web_search_handles_empty_results():
     import samantha.tools as _tools_mod
+
     _tools_mod._openai_client = None
     mock_response = SimpleNamespace(output=[])
 
@@ -333,6 +350,7 @@ async def test_web_search_handles_empty_results():
 
 async def test_web_search_handles_api_error():
     import samantha.tools as _tools_mod
+
     _tools_mod._openai_client = None
     with patch("samantha.tools.openai.AsyncOpenAI", autospec=False) as mock_cls:
         mock_client = MagicMock()
@@ -402,6 +420,7 @@ async def test_capture_display_handles_missing_caller():
 
 # -- format_tool_error --
 
+
 def test_format_tool_error_includes_tool_name():
     result = format_tool_error("bash", "command not found")
     assert result == "Error in bash: command not found"
@@ -419,6 +438,7 @@ def test_format_tool_error_truncates_long_message():
 
 
 # -- condense_for_voice --
+
 
 def test_condense_strips_markdown_headers():
     assert "Summary" in condense_for_voice("## Summary\nSome content")
@@ -484,6 +504,7 @@ async def test_reason_deeply_condenses_markdown():
 
 
 # -- delegation telemetry --
+
 
 async def test_reason_deeply_logs_success_telemetry(caplog):
     """Successful delegation emits start and success log messages with correlation ID, model, and duration."""

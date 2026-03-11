@@ -23,6 +23,7 @@ VALID_VOICES = {
 }
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 VALID_TURN_DETECTION_TYPES = {"semantic_vad", "server_vad"}
+RUNTIME_MUTABLE_FIELDS = frozenset({"voice", "safe_mode", "confirm_destructive", "memory_enabled"})
 
 
 @dataclass
@@ -90,10 +91,28 @@ def load_config(path: Path | None = None) -> Config:
     if config_path.exists():
         raw = json.loads(config_path.read_text())
         known = {f.name for f in fields(Config)}
+        if path is not None and "data_dir" not in raw:
+            raw["data_dir"] = str(config_path.parent)
         return Config(**{k: v for k, v in raw.items() if k in known})
+    if path is not None:
+        return Config(data_dir=config_path.parent)
     return Config()
 
 
 def save_config(cfg: Config) -> None:
     ensure_data_dir(cfg)
     cfg.config_path.write_text(json.dumps(cfg.to_dict(), indent=2) + "\n")
+
+
+def update_config(path: Path | None = None, **updates: object) -> Config:
+    """Persist a limited set of runtime-overridable settings and return the updated config."""
+    unknown = sorted(set(updates) - set(RUNTIME_MUTABLE_FIELDS))
+    if unknown:
+        raise ValueError(f"Unsupported config update fields: {', '.join(unknown)}")
+
+    cfg = load_config(path)
+    for key, value in updates.items():
+        setattr(cfg, key, value)
+    cfg.validate()
+    save_config(cfg)
+    return cfg

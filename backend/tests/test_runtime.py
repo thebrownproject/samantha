@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 from types import SimpleNamespace
 
@@ -10,7 +11,7 @@ import pytest
 from agents.realtime import RealtimeModelSendRawMessage
 
 from samantha.agents import create_voice_agent
-from samantha.config import Config
+from samantha.config import Config, load_config
 from samantha.events import AppState
 from samantha.protocol import protocol_message
 from samantha.runtime import RealtimeRuntime
@@ -158,9 +159,7 @@ async def test_runtime_controls_audio_commit_context_and_approvals(cfg):
     assert protocol_message("clear_playback") in ws.json_messages
 
     raw_messages = [
-        event.message
-        for event in session.model.sent_events
-        if isinstance(event, RealtimeModelSendRawMessage)
+        event.message for event in session.model.sent_events if isinstance(event, RealtimeModelSendRawMessage)
     ]
     assert {"type": "input_audio_buffer.commit"} in raw_messages
     assert {
@@ -240,12 +239,15 @@ async def test_runtime_forwards_session_events_to_websocket(cfg):
     assert protocol_message("transcript", role="user", text="hello", final=True) in ws.json_messages
     assert protocol_message("transcript", role="assistant", text="hi there", final=True) in ws.json_messages
     assert protocol_message("tool_start", name="file_write", args={"path": "/tmp/test.txt"}) in ws.json_messages
-    assert protocol_message(
-        "tool_approval_required",
-        name="file_write",
-        call_id="call_7",
-        args={"path": "/tmp/test.txt"},
-    ) in ws.json_messages
+    assert (
+        protocol_message(
+            "tool_approval_required",
+            name="file_write",
+            call_id="call_7",
+            args={"path": "/tmp/test.txt"},
+        )
+        in ws.json_messages
+    )
     assert protocol_message("clear_playback") in ws.json_messages
     assert protocol_message("tool_end", name="file_write", result="ok") in ws.json_messages
     assert protocol_message("error", message="boom") in ws.json_messages
@@ -333,5 +335,48 @@ async def test_runtime_logs_turn_lifecycle_metrics(cfg, caplog):
     assert "Turn started session_id=" in caplog.text
     assert "First audio session_id=" in caplog.text
     assert "Turn finished session_id=" in caplog.text
+
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_runtime_persists_voice_change_and_refreshes_session(cfg):
+    ws = FakeWSServer()
+    agent, runner_config = create_voice_agent(cfg)
+    sessions: list[FakeSession] = []
+    runners: list[FakeRunner] = []
+    runner_configs: list[dict[str, object]] = []
+
+    def runner_factory(**kwargs):
+        session = FakeSession()
+        runner = FakeRunner(session)
+        sessions.append(session)
+        runners.append(runner)
+        runner_configs.append(copy.deepcopy(kwargs["config"]))
+        return runner
+
+    runtime = RealtimeRuntime(
+        cfg,
+        ws,
+        agent=agent,
+        runner_config=runner_config,
+        runner_factory=runner_factory,
+        require_api_key=False,
+    )
+
+    await runtime.handle_start_listening()
+    await asyncio.sleep(0.05)
+    assert runners[0].run_calls == 1
+    assert runner_configs[0]["model_settings"]["audio"]["output"]["voice"] == "ash"
+
+    await runtime.handle_voice_changed("coral")
+    persisted = load_config(cfg.config_path)
+    assert persisted.voice == "coral"
+
+    await runtime.wait_until_ready()
+    await asyncio.sleep(0.05)
+    assert len(runners) == 2
+    assert runners[1].run_calls == 1
+    assert runner_configs[1]["model_settings"]["audio"]["output"]["voice"] == "coral"
 
     await runtime.stop()

@@ -23,8 +23,7 @@ DEFAULT_CAPTURE_DISPLAY_RESULT = {
     "height": 2,
     "mime_type": "image/png",
     "image_base64": (
-        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8"
-        "/5+hHgMDAwMDEwMAAAU7AQob7tqRAAAAAElFTkSuQmCC"
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8/5+hHgMDAwMDEwMAAAU7AQob7tqRAAAAAElFTkSuQmCC"
     ),
 }
 DEFAULT_FRONTMOST_APP_CONTEXT_RESULT = {
@@ -54,7 +53,7 @@ def encode_control_message(msg_type: str, /, **payload: Any) -> str:
 def chunk_audio_bytes(data: bytes, chunk_size: int) -> list[bytes]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
-    return [data[index:index + chunk_size] for index in range(0, len(data), chunk_size)]
+    return [data[index : index + chunk_size] for index in range(0, len(data), chunk_size)]
 
 
 def default_visual_context_app_tool_results() -> dict[str, dict[str, Any]]:
@@ -238,7 +237,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Auto-answer frontmost_app_context and capture_display app-tool calls with canned results",
     )
-    parser.add_argument("--idle-timeout", type=float, default=DEFAULT_IDLE_TIMEOUT, help="Seconds to wait after the last received message")
+    parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=DEFAULT_IDLE_TIMEOUT,
+        help="Seconds to wait after the last received message",
+    )
     parser.add_argument("--quiet", action="store_true", help="Suppress per-message output and print only the summary")
     return parser
 

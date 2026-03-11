@@ -79,12 +79,14 @@ def test_all_modules_importable():
 
 def test_package_has_version():
     import samantha
+
     assert hasattr(samantha, "__version__")
     assert isinstance(samantha.__version__, str)
 
 
 def test_main_has_entry_point():
     from samantha.main import main
+
     assert callable(main)
 
 

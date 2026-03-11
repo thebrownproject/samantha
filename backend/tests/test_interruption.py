@@ -29,6 +29,7 @@ def wired_dispatcher():
 
 # -- InterruptionHandler standalone --
 
+
 class TestInterruptionHandler:
     def test_not_interruptible_when_idle(self, handler):
         assert handler.is_interruptible is False
@@ -74,11 +75,13 @@ class TestInterruptionHandler:
 
 # -- msg_clear_playback --
 
+
 def test_msg_clear_playback():
     assert msg_clear_playback() == protocol_message("clear_playback")
 
 
 # -- Integration with EventDispatcher --
+
 
 class TestInterruptionIntegration:
     def test_auto_barge_in_during_speaking(self, wired_dispatcher):
@@ -90,9 +93,7 @@ class TestInterruptionIntegration:
         assert h.is_interruptible is True
 
         # VAD detects speech -> triggers interruption
-        d.handle_event(
-            _evt("raw_model_event", data={"type": "input_audio_buffer.speech_started"})
-        )
+        d.handle_event(_evt("raw_model_event", data={"type": "input_audio_buffer.speech_started"}))
         assert d.state == AppState.LISTENING
         assert h.is_interruptible is False
 

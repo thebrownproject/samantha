@@ -109,6 +109,13 @@ The first app-side target is simple:
 
 Only after that should you verify mic and playback.
 
+Settings source of truth for the first Mac run:
+
+- backend runtime settings remain canonical in `~/.samantha/config.json`
+- the app can cache UI state locally, but it must sync `voice`, `safe_mode`, `confirm_destructive`, and `memory_enabled` back to backend config rather than letting `UserDefaults` drift on their own
+- the OpenAI API key can stay in macOS Keychain, but the launched backend process still needs it in `OPENAI_API_KEY`
+- `set_voice` should be treated as a next-session change unless the backend explicitly tears down and recreates the realtime session
+
 ## 6. Permissions to verify
 
 ### Microphone

@@ -28,12 +28,7 @@ async def test_schema_version_set(tmp_path):
 async def test_tables_exist(tmp_path):
     store = MemoryStore(db_path=tmp_path / "memory.db")
     await store.initialize()
-    tables = {
-        r[0]
-        for r in store.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    }
+    tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "memories" in tables
     assert "daily_logs" in tables
     assert "schema_version" in tables
@@ -96,12 +91,7 @@ async def test_parent_dir_created(tmp_path):
 async def test_fts5_table_exists(tmp_path):
     store = MemoryStore(db_path=tmp_path / "memory.db")
     await store.initialize()
-    tables = {
-        r[0]
-        for r in store.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    }
+    tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "memories_fts" in tables
     await store.close()
 
@@ -109,12 +99,7 @@ async def test_fts5_table_exists(tmp_path):
 async def test_vec0_table_exists(tmp_path):
     store = MemoryStore(db_path=tmp_path / "memory.db")
     await store.initialize()
-    tables = {
-        r[0]
-        for r in store.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    }
+    tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "memory_embeddings" in tables
     await store.close()
 
@@ -137,9 +122,7 @@ async def test_fts_trigger_insert(tmp_path):
         ("remember this fact", "test,demo"),
     )
     store.conn.commit()
-    rows = store.conn.execute(
-        "SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("remember",)
-    ).fetchall()
+    rows = store.conn.execute("SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("remember",)).fetchall()
     assert len(rows) == 1
     assert "remember this fact" in rows[0][0]
     await store.close()
@@ -149,14 +132,13 @@ async def test_fts_trigger_delete(tmp_path):
     store = MemoryStore(db_path=tmp_path / "memory.db")
     await store.initialize()
     store.conn.execute(
-        "INSERT INTO memories (content, tags) VALUES (?, ?)", ("delete me", "temp"),
+        "INSERT INTO memories (content, tags) VALUES (?, ?)",
+        ("delete me", "temp"),
     )
     store.conn.commit()
     store.conn.execute("DELETE FROM memories WHERE content = 'delete me'")
     store.conn.commit()
-    rows = store.conn.execute(
-        "SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("delete",)
-    ).fetchall()
+    rows = store.conn.execute("SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("delete",)).fetchall()
     assert len(rows) == 0
     await store.close()
 
@@ -165,19 +147,14 @@ async def test_fts_trigger_update(tmp_path):
     store = MemoryStore(db_path=tmp_path / "memory.db")
     await store.initialize()
     store.conn.execute(
-        "INSERT INTO memories (content, tags) VALUES (?, ?)", ("old content", "v1"),
+        "INSERT INTO memories (content, tags) VALUES (?, ?)",
+        ("old content", "v1"),
     )
     store.conn.commit()
-    store.conn.execute(
-        "UPDATE memories SET content = 'new content', tags = 'v2' WHERE content = 'old content'"
-    )
+    store.conn.execute("UPDATE memories SET content = 'new content', tags = 'v2' WHERE content = 'old content'")
     store.conn.commit()
-    old = store.conn.execute(
-        "SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("old",)
-    ).fetchall()
-    new = store.conn.execute(
-        "SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("new",)
-    ).fetchall()
+    old = store.conn.execute("SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("old",)).fetchall()
+    new = store.conn.execute("SELECT * FROM memories_fts WHERE memories_fts MATCH ?", ("new",)).fetchall()
     assert len(old) == 0
     assert len(new) == 1
     await store.close()
@@ -201,12 +178,7 @@ async def test_v1_to_v2_migration(tmp_path):
     await store.initialize()
     row = store.conn.execute("SELECT version FROM schema_version").fetchone()
     assert row[0] == 2
-    tables = {
-        r[0]
-        for r in store.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    }
+    tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "memories_fts" in tables
     assert "memory_embeddings" in tables
     await store.close()
@@ -230,7 +202,8 @@ async def test_save_generates_embedding(tmp_path):
     await store.initialize()
     mem_id = await store.save("Embedding test content")
     row = store.conn.execute(
-        "SELECT memory_id FROM memory_embeddings WHERE memory_id = ?", (mem_id,),
+        "SELECT memory_id FROM memory_embeddings WHERE memory_id = ?",
+        (mem_id,),
     ).fetchone()
     assert row is not None
     assert row[0] == mem_id
@@ -418,7 +391,8 @@ async def test_promote_to_memory(tmp_path):
     log_id = await store.append_daily_log("User prefers dark mode", "2026-03-10")
     mem_id = await store.promote_to_memory(log_id, tags="preference")
     row = store.conn.execute(
-        "SELECT content, tags, source FROM memories WHERE id = ?", (mem_id,),
+        "SELECT content, tags, source FROM memories WHERE id = ?",
+        (mem_id,),
     ).fetchone()
     assert row[0] == "User prefers dark mode"
     assert row[1] == "preference"
@@ -432,7 +406,8 @@ async def test_promote_generates_embedding(tmp_path):
     log_id = await store.append_daily_log("Embedding promotion test", "2026-03-10")
     mem_id = await store.promote_to_memory(log_id)
     row = store.conn.execute(
-        "SELECT memory_id FROM memory_embeddings WHERE memory_id = ?", (mem_id,),
+        "SELECT memory_id FROM memory_embeddings WHERE memory_id = ?",
+        (mem_id,),
     ).fetchone()
     assert row is not None
     assert row[0] == mem_id
@@ -478,7 +453,7 @@ async def test_search_empty_query(tmp_path):
     await store.initialize()
     await store.save("Some stored memory")
     results = await store.search("   ")
-    assert isinstance(results, list)
+    assert results == []
     await store.close()
 
 

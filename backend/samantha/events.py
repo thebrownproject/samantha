@@ -39,6 +39,7 @@ class AppState(StrEnum):
 
 # -- JSON message builders for IPC protocol --
 
+
 def msg_state_change(state: AppState) -> dict[str, Any]:
     return protocol_message("state_change", state=str(state))
 
