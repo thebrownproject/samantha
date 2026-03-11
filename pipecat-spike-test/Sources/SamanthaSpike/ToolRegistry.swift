@@ -74,8 +74,8 @@ final class ToolRegistry: @unchecked Sendable {
 // MARK: - Default tool registration
 
 extension ToolRegistry {
-    /// Register all 8 tool schemas. safe_bash, applescript, file_read, file_write
-    /// have real handlers; remaining tools use placeholders until implemented.
+    /// Register all 8 tool schemas. frontmost_app_context and capture_display use
+    /// placeholders here (overridden by DesktopTools.register); rest have real handlers.
     static func withDefaultTools(confirmDestructive: Bool = false) -> ToolRegistry {
         let registry = ToolRegistry()
 
@@ -169,7 +169,7 @@ extension ToolRegistry {
                 ]),
             ],
             required: ["task"],
-            handler: placeholder
+            handler: reasonDeeplyHandler
         )
 
         registry.register(
@@ -182,7 +182,7 @@ extension ToolRegistry {
                 ]),
             ],
             required: ["query"],
-            handler: placeholder
+            handler: webSearchHandler
         )
 
         return registry
