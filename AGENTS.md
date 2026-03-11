@@ -203,6 +203,8 @@ bd ready --json
 bd init --from-jsonl --force --prefix sam
 ```
 
+Use issue descriptions and repo docs for clone-critical context. The repo-backed JSONL restore brings issues and dependencies across clones correctly, but it does not restore issue comment bodies.
+
 **Create new issues:**
 
 ```bash

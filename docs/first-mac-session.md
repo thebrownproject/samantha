@@ -28,6 +28,8 @@ If this repo is freshly cloned onto the Mac and `bd` does not yet show these iss
 bd init --from-jsonl --force --prefix sam
 ```
 
+Use the issue descriptions plus this document as the portable source of truth for clone-critical context. The current repo-backed Beads export restores issues and dependencies correctly, but not issue comment bodies.
+
 ## 1. Create the Xcode project
 
 Create a new macOS App project in Xcode with:
