@@ -29,11 +29,14 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
     private var deepgramAPIKey: String?
     private var openRouterAPIKey: String?
 
+    private var pendingContinuations: [String: CheckedContinuation<Bool, Never>] = [:]
+    private var alwaysApprovedTools: Set<String> = []
+
     lazy var consoleActions: DevConsoleActions = DevConsoleActions(
         onTalkToggle: { [weak self] in self?.toggleListening() },
         onInterrupt: { [weak self] in self?.interruptSession() },
-        onApprove: { _, _ in },
-        onReject: { _, _ in },
+        onApprove: { [weak self] callId, always in self?.resolveApproval(callId: callId, approved: true, always: always) },
+        onReject: { [weak self] callId, always in self?.resolveApproval(callId: callId, approved: false, always: always) },
         onClearLog: { [weak self] in self?.consoleState.clearLog() }
     )
 
@@ -73,10 +76,12 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
         DesktopTools.register(on: registry, executor: desktopContextToolExecutor)
         toolRegistry = registry
 
-        functionCallHandler = FunctionCallHandler(
+        let handler = FunctionCallHandler(
             toolRegistry: registry,
             agentClient: agentClient
         )
+        handler.approvalDelegate = self
+        functionCallHandler = handler
 
         consoleState.log("Spike app launched (Voice Agent mode)")
     }
@@ -134,6 +139,49 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
         consoleState.isCapturing = audioManager.isCapturing
         consoleState.isPlaying = audioManager.isPlaying
         orbController?.orbState.appState = newState
+    }
+
+    private func resolveApproval(callId: String, approved: Bool, always: Bool) {
+        guard let continuation = pendingContinuations.removeValue(forKey: callId) else { return }
+        if approved, always, let approval = consoleState.pendingApprovals.first(where: { $0.id == callId }) {
+            alwaysApprovedTools.insert(approval.toolName)
+            consoleState.log("Auto-approve enabled for \(approval.toolName)")
+        }
+        consoleState.removeApproval(callId: callId)
+        continuation.resume(returning: approved)
+    }
+}
+
+// MARK: - FunctionCallApprovalDelegate
+
+extension SpikeAppDelegate: FunctionCallApprovalDelegate {
+    nonisolated func functionCallNeedsApproval(id: String, name: String, args: String) async -> Bool {
+        await _requestApproval(id: id, name: name, args: args)
+    }
+
+    /// MainActor-isolated helper so we can safely access state and continuations.
+    private func _requestApproval(id: String, name: String, args: String) async -> Bool {
+        if alwaysApprovedTools.contains(name) {
+            consoleState.log("Auto-approved \(name)")
+            return true
+        }
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                pendingContinuations[id] = continuation
+                consoleState.addApproval(callId: id, toolName: name, argsDescription: args)
+                consoleState.log("Awaiting approval for \(name)")
+            }
+        } onCancel: {
+            // Timeout or task cancellation -- clean up on MainActor
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let continuation = self.pendingContinuations.removeValue(forKey: id) {
+                    self.consoleState.removeApproval(callId: id)
+                    continuation.resume(returning: false)
+                }
+            }
+        }
     }
 }
 
