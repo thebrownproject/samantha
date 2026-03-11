@@ -136,13 +136,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func approveToolCall(callId: String, always: Bool) {
         consoleState.log("Approve tool call: \(callId) (always: \(always))", level: .info)
         consoleState.removeApproval(callId: callId)
-        // TODO(sam-d5g): webSocketClient.approveToolCall(callId: callId, always: always)
+        Task {
+            try? await webSocketClient.approveToolCall(callId: callId, always: always)
+        }
     }
 
     private func rejectToolCall(callId: String, always: Bool) {
         consoleState.log("Reject tool call: \(callId) (always: \(always))", level: .info)
         consoleState.removeApproval(callId: callId)
-        // TODO(sam-d5g): webSocketClient.rejectToolCall(callId: callId, always: always)
+        Task {
+            try? await webSocketClient.rejectToolCall(callId: callId, always: always)
+        }
     }
 
     // MARK: - Helpers

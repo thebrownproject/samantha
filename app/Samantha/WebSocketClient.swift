@@ -34,6 +34,32 @@ extension WebSocketClientDelegate {
     func webSocketClient(_ client: WebSocketClient, didReceiveError message: String) {}
 }
 
+// Bridges URLSessionWebSocketDelegate callbacks (arbitrary queue) to @MainActor WebSocketClient
+private class SessionDelegate: NSObject, URLSessionWebSocketDelegate {
+    weak var owner: WebSocketClient?
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        Task { @MainActor [weak owner] in
+            owner?.handleOpen()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        Task { @MainActor [weak owner] in
+            owner?.handleClose()
+        }
+    }
+}
+
 @MainActor
 final class WebSocketClient: ObservableObject {
     @Published private(set) var connectionState: WebSocketConnectionState = .disconnected
@@ -42,7 +68,8 @@ final class WebSocketClient: ObservableObject {
     weak var appToolExecutor: AppToolExecutor?
 
     private let url: URL
-    private let session: URLSession
+    private let sessionDelegate = SessionDelegate()
+    private var session: URLSession?
     private var socketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
@@ -51,7 +78,7 @@ final class WebSocketClient: ObservableObject {
 
     init(url: URL = URL(string: "ws://localhost:9090")!) {
         self.url = url
-        self.session = URLSession(configuration: .default)
+        sessionDelegate.owner = self
     }
 
     func connect() {
@@ -68,9 +95,13 @@ final class WebSocketClient: ObservableObject {
         receiveTask = nil
         socketTask?.cancel(with: .normalClosure, reason: nil)
         socketTask = nil
+        session?.invalidateAndCancel()
+        session = nil
         connectionState = .disconnected
         delegate?.webSocketClient(self, didChangeConnectionState: .disconnected)
     }
+
+    // MARK: - Public IPC Methods
 
     func startListening() async throws {
         try await sendJSON(["type": "start_listening"])
@@ -84,8 +115,28 @@ final class WebSocketClient: ObservableObject {
         try await sendJSON(["type": "interrupt"])
     }
 
+    func approveToolCall(callId: String, always: Bool = false) async throws {
+        try await sendJSON(["type": "approve_tool_call", "call_id": callId, "always": always])
+    }
+
+    func rejectToolCall(callId: String, always: Bool = false) async throws {
+        try await sendJSON(["type": "reject_tool_call", "call_id": callId, "always": always])
+    }
+
+    func setVoice(_ voice: String) async throws {
+        try await sendJSON(["type": "set_voice", "voice": voice])
+    }
+
+    func injectContext(_ text: String) async throws {
+        try await sendJSON(["type": "inject_context", "text": text])
+    }
+
+    func requestState() async throws {
+        try await sendJSON(["type": "get_state"])
+    }
+
     func sendAudio(_ data: Data) async {
-        guard let socketTask else { return }
+        guard connectionState == .connected, let socketTask else { return }
         do {
             try await socketTask.send(.data(data))
         } catch {
@@ -93,28 +144,48 @@ final class WebSocketClient: ObservableObject {
         }
     }
 
+    // MARK: - Connection Lifecycle
+
     private func openConnection() async {
         guard shouldReconnect else { return }
 
-        let task = session.webSocketTask(with: url)
+        // Fresh session per connection attempt to avoid stale delegate state
+        let newSession = URLSession(configuration: .default, delegate: sessionDelegate, delegateQueue: nil)
+        session = newSession
+
+        let task = newSession.webSocketTask(with: url)
         socketTask = task
         connectionState = .connecting
         delegate?.webSocketClient(self, didChangeConnectionState: .connecting)
         task.resume()
+        // Connected state deferred to SessionDelegate.didOpenWithProtocol
+    }
 
+    /// Called by SessionDelegate when the WebSocket handshake completes.
+    fileprivate func handleOpen() {
+        guard connectionState == .connecting else { return }
         connectionState = .connected
         reconnectAttempt = 0
         delegate?.webSocketClient(self, didChangeConnectionState: .connected)
 
-        do {
-            try await sendJSON(["type": "get_state"])
-        } catch {
-            wsLog.error("Initial get_state send failed: \(error.localizedDescription)")
+        Task {
+            do {
+                try await sendJSON(["type": "get_state"])
+            } catch {
+                wsLog.error("Initial get_state send failed: \(error.localizedDescription)")
+            }
         }
 
+        guard let socketTask else { return }
         receiveTask = Task { [weak self] in
-            await self?.receiveLoop(for: task)
+            await self?.receiveLoop(for: socketTask)
         }
+    }
+
+    /// Called by SessionDelegate when the server sends a close frame.
+    fileprivate func handleClose() {
+        guard connectionState != .disconnected else { return }
+        handleDisconnect()
     }
 
     private func receiveLoop(for task: URLSessionWebSocketTask) async {
@@ -131,13 +202,14 @@ final class WebSocketClient: ObservableObject {
                 }
             } catch {
                 wsLog.error("Receive loop ended: \(error.localizedDescription)")
-                await handleDisconnect()
+                handleDisconnect()
                 return
             }
         }
     }
 
-    private func handleDisconnect() async {
+    private func handleDisconnect() {
+        guard connectionState != .disconnected else { return }
         receiveTask?.cancel()
         receiveTask = nil
         socketTask = nil
@@ -145,6 +217,10 @@ final class WebSocketClient: ObservableObject {
         delegate?.webSocketClient(self, didChangeConnectionState: .disconnected)
 
         guard shouldReconnect else { return }
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
         reconnectAttempt += 1
         let delay = min(pow(2.0, Double(reconnectAttempt - 1)), 5.0)
         reconnectTask?.cancel()
@@ -154,6 +230,8 @@ final class WebSocketClient: ObservableObject {
             await self.openConnection()
         }
     }
+
+    // MARK: - Message Handling
 
     private func handleText(_ text: String) async {
         guard let data = text.data(using: .utf8),
@@ -251,7 +329,7 @@ final class WebSocketClient: ObservableObject {
     }
 
     private func sendJSON(_ payload: [String: Any]) async throws {
-        guard let socketTask else {
+        guard connectionState == .connected, let socketTask else {
             throw URLError(.notConnectedToInternet)
         }
         var message = payload
