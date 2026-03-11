@@ -9,6 +9,7 @@ from samantha.events import (
     EventDispatcher,
     msg_error,
     msg_state_change,
+    msg_tool_approval_required,
     msg_tool_end,
     msg_tool_start,
     msg_transcript,
@@ -72,6 +73,16 @@ def test_msg_tool_end_no_result():
     assert "result" not in m
 
 
+def test_msg_tool_approval_required():
+    m = msg_tool_approval_required("file_write", "call_123", {"path": "/tmp/test.txt"})
+    assert m == {
+        "type": "tool_approval_required",
+        "name": "file_write",
+        "call_id": "call_123",
+        "args": {"path": "/tmp/test.txt"},
+    }
+
+
 def test_msg_error():
     assert msg_error("timeout") == {"type": "error", "message": "timeout"}
 
@@ -131,6 +142,20 @@ def test_raw_speech_started_transitions_to_listening(dispatcher):
     assert dispatcher.state == AppState.LISTENING
 
 
+def test_raw_server_event_speech_started_transitions_to_listening(dispatcher):
+    dispatcher.handle_event(_evt("audio", data=b"\x00"))
+    dispatcher.handle_event(
+        _evt(
+            "raw_model_event",
+            data=SimpleNamespace(
+                type="raw_server_event",
+                data={"type": "input_audio_buffer.speech_started"},
+            ),
+        )
+    )
+    assert dispatcher.state == AppState.LISTENING
+
+
 def test_raw_model_event_ignores_other_types(dispatcher):
     dispatcher.handle_event(_evt("raw_model_event", data={"type": "other.event"}))
     assert dispatcher.state == AppState.IDLE
@@ -186,10 +211,11 @@ def test_on_tool_event_callback_start(dispatcher):
     events = []
     dispatcher.on_tool_event(events.append)
     tool = SimpleNamespace(name="safe_bash")
-    dispatcher.handle_event(_evt("tool_start", tool=tool))
+    dispatcher.handle_event(_evt("tool_start", tool=tool, arguments='{"command": "ls"}'))
     assert len(events) == 1
     assert events[0]["type"] == "tool_start"
     assert events[0]["name"] == "safe_bash"
+    assert events[0]["args"] == {"command": "ls"}
 
 
 def test_on_tool_event_callback_end(dispatcher):
@@ -206,6 +232,23 @@ def test_on_error_callback(dispatcher):
     dispatcher.on_error(errors.append)
     dispatcher.handle_event(_evt("error", error="oops"))
     assert errors == [{"type": "error", "message": "oops"}]
+
+
+def test_on_tool_approval_callback(dispatcher):
+    approvals = []
+    dispatcher.on_tool_approval(approvals.append)
+    tool = SimpleNamespace(name="file_write")
+    dispatcher.handle_event(
+        _evt("tool_approval_required", tool=tool, call_id="call_1", arguments='{"path": "/tmp/test.txt"}')
+    )
+    assert approvals == [
+        {
+            "type": "tool_approval_required",
+            "name": "file_write",
+            "call_id": "call_1",
+            "args": {"path": "/tmp/test.txt"},
+        }
+    ]
 
 
 def test_multiple_callbacks(dispatcher):
@@ -311,3 +354,43 @@ def test_emit_transcript_normalizes_role(dispatcher):
     dispatcher.on_transcript(received.append)
     dispatcher.emit_transcript("text", "unknown_role")
     assert received[0]["role"] == "assistant"
+
+
+def test_history_added_emits_user_transcript(dispatcher):
+    received = []
+    dispatcher.on_transcript(received.append)
+    item = SimpleNamespace(
+        item_id="user_1",
+        type="message",
+        role="user",
+        content=[SimpleNamespace(type="input_text", text="hello from user")],
+    )
+    dispatcher.handle_event(_evt("history_added", item=item))
+    assert received == [
+        {"type": "transcript", "role": "user", "text": "hello from user", "final": True}
+    ]
+
+
+def test_history_updated_emits_assistant_partial_then_final(dispatcher):
+    received = []
+    dispatcher.on_transcript(received.append)
+    partial = SimpleNamespace(
+        item_id="assistant_1",
+        type="message",
+        role="assistant",
+        status="in_progress",
+        content=[SimpleNamespace(type="audio", transcript="hello there")],
+    )
+    final = SimpleNamespace(
+        item_id="assistant_1",
+        type="message",
+        role="assistant",
+        status="completed",
+        content=[SimpleNamespace(type="audio", transcript="hello there")],
+    )
+    dispatcher.handle_event(_evt("history_updated", history=[partial]))
+    dispatcher.handle_event(_evt("history_updated", history=[final]))
+    assert received == [
+        {"type": "transcript", "role": "assistant", "text": "hello there", "final": False},
+        {"type": "transcript", "role": "assistant", "text": "hello there", "final": True},
+    ]

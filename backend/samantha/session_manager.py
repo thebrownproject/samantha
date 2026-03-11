@@ -54,8 +54,16 @@ class SessionManager:
         self._health_check_count = 0
 
     @property
+    def dispatcher(self) -> EventDispatcher:
+        return self._dispatcher
+
+    @property
     def is_connected(self) -> bool:
         return self._is_connected
+
+    @property
+    def is_running(self) -> bool:
+        return self._run_task is not None and not self._run_task.done()
 
     @property
     def reconnect_count(self) -> int:
@@ -100,6 +108,9 @@ class SessionManager:
                     logger.info("Session reconnected (attempt %d)", attempt)
                 await self._runner.run()
                 # Clean exit from run() means session ended normally
+                self._is_connected = False
+                if not self._stopping:
+                    self._dispatcher.set_state(AppState.IDLE)
                 break
             except asyncio.CancelledError:
                 break

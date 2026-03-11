@@ -27,10 +27,11 @@ def test_build_runner_config_defaults(cfg):
 
     rc = build_runner_config(cfg)
     ms = rc["model_settings"]
-    assert ms["model_name"] == "gpt-4o-realtime-preview"
+    assert ms["model_name"] == "gpt-realtime"
     assert ms["audio"]["input"]["format"] == "pcm16"
     assert ms["audio"]["input"]["transcription"]["model"] == "gpt-4o-mini-transcribe"
     assert ms["audio"]["input"]["turn_detection"]["type"] == "semantic_vad"
+    assert ms["audio"]["input"]["turn_detection"]["create_response"] is True
     assert ms["audio"]["input"]["turn_detection"]["interrupt_response"] is True
     assert ms["audio"]["output"]["format"] == "pcm16"
     assert ms["audio"]["output"]["voice"] == "ash"

@@ -16,6 +16,7 @@ EXPECTED_MODULES = [
     "samantha.ws_server",
     "samantha.config",
     "samantha.prompts",
+    "samantha.runtime",
 ]
 
 REQUIRED_RUNTIME_DEPS = [
@@ -98,6 +99,7 @@ def test_module_files_exist():
         "ws_server.py",
         "config.py",
         "prompts.py",
+        "runtime.py",
     ]
     for fname in expected_files:
         assert (pkg_dir / fname).exists(), f"Missing module: {fname}"

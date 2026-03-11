@@ -13,7 +13,7 @@ def test_default_values():
     assert cfg.safe_mode is True
     assert cfg.confirm_destructive is True
     assert cfg.memory_enabled is True
-    assert cfg.model_name == "gpt-4o-realtime-preview"
+    assert cfg.model_name == "gpt-realtime"
     assert cfg.reasoning_model == "gpt-5-mini-2025-08-07"
     assert cfg.transcription_model == "gpt-4o-mini-transcribe"
     assert cfg.voice == "ash"
@@ -33,7 +33,7 @@ def test_partial_config_merge(tmp_path):
     assert cfg.voice == "coral"
     assert cfg.ws_port == 8080
     assert cfg.safe_mode is True
-    assert cfg.model_name == "gpt-4o-realtime-preview"
+    assert cfg.model_name == "gpt-realtime"
 
 
 def test_load_missing_file_returns_defaults(tmp_path):

@@ -18,13 +18,14 @@ import asyncio, json
 from websockets.asyncio.client import connect
 
 async def main():
-    async with connect('ws://localhost:9090') as ws:
+    async with connect('ws://127.0.0.1:9090') as ws:
         await ws.send(json.dumps({'type':'start_listening'}))
-        await ws.send(b'\\x00\\x01' * 160)
-        await ws.send(json.dumps({'type':'inject_context','text':'audit runtime check'}))
-        await ws.send(json.dumps({'type':'set_voice','voice':'coral'}))
+        print(await ws.recv())
+        await ws.send(json.dumps({'type':'inject_context','text':'runtime smoke test'}))
+        await ws.send(json.dumps({'type':'get_state'}))
+        print(await ws.recv())
         await ws.send(json.dumps({'type':'stop_listening'}))
-        print('runtime websocket smoke passed')
+        print(await ws.recv())
 
 asyncio.run(main())
 PY
@@ -35,24 +36,25 @@ PY
 1. Live API smoke test for `reason_deeply`
 2. Live API smoke test for `web_search`
 3. Full backend entrypoint startup (`samantha.main`)
-4. Live websocket connection to the running backend
-5. Runtime control-message handling:
+4. Lazy realtime-session startup on first websocket interaction
+5. Live websocket connection to the running backend
+6. Runtime control-message handling:
    - `start_listening`
-   - binary audio frame send
    - `inject_context`
-   - `set_voice`
+   - `get_state`
    - `stop_listening`
-6. Graceful shutdown via interrupt signal
-7. App-level e2e feasibility check (blocked)
+7. Graceful shutdown via interrupt signal
+8. App-level e2e feasibility check (blocked)
 
 ## Pass / Fail Results
 
 - `pytest -q -m e2e`: pass
-  - Result: `2 passed, 260 deselected in 16.37s`
+  - Result: `2 passed, 271 deselected in 14.29s`
 - Backend runtime startup: pass
-  - Startup logs confirmed memory initialization, MCP skip on non-macOS, agent readiness, websocket bind, and running state
+  - Startup logs confirmed memory initialization, MCP skip on non-macOS, agent readiness, websocket bind, realtime-session connection, and clean shutdown
 - Live websocket smoke against runtime server: pass
-  - Client connected, sent control and audio frames, and server logged voice update plus clean disconnect
+  - `start_listening` succeeded only after the realtime session connected
+  - `inject_context`, `get_state`, and `stop_listening` completed cleanly
 - App boot / UI / audio / hotkey / full end-to-end macOS flow: not executable in this repo/environment
 
 ## Failures and Root Causes
@@ -74,9 +76,12 @@ PY
 
 - Registered the `e2e` pytest mark in `backend/pyproject.toml` so test collection is warning-free.
 - Corrected `scripts/dev.sh` to validate the installed OpenAI Agents SDK using `import agents`.
+- Added a live backend realtime runtime that creates and manages `RealtimeRunner` / `RealtimeSession`.
+- Added websocket-to-realtime bridging for control messages, transcripts, audio, interruptions, and approval requests.
+- Added websocket approval commands (`approve_tool_call`, `reject_tool_call`) and backend approval logging.
 
 ## Residual Issues
 
 - No full app-level e2e is possible until the Swift project/workspace is checked in and validated on macOS.
-- The backend runtime booted successfully, but it still does not instantiate a live realtime session loop.
-- The websocket smoke only validates the protocol server path, not a full voice turn from microphone to model to playback.
+- The backend runtime now connects a live realtime session, but end-to-end microphone capture, playback timing, and approval UX still require the missing macOS client.
+- AppleScript MCP behavior still needs a real macOS verification pass.

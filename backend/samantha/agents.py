@@ -24,6 +24,7 @@ def build_runner_config(cfg: Config) -> dict:
                     "transcription": {"model": cfg.transcription_model},
                     "turn_detection": {
                         "type": cfg.turn_detection_type,
+                        "create_response": True,
                         "interrupt_response": cfg.interrupt_response,
                     },
                 },

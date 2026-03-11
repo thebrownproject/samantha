@@ -11,6 +11,7 @@ import websockets
 from websockets.asyncio.client import connect
 
 from samantha.config import Config
+from samantha.events import AppState
 from samantha.ws_server import ConnectionState, WSServer
 
 
@@ -116,6 +117,38 @@ async def test_interrupt(server):
 
 
 @pytest.mark.asyncio
+async def test_start_listening_invokes_handler(server):
+    called = False
+
+    async def handler():
+        nonlocal called
+        called = True
+
+    server.start_listening_handler = handler
+
+    async with connect(_uri(server)) as ws:
+        await ws.send(json.dumps({"type": "start_listening"}))
+        await asyncio.sleep(0.05)
+        assert called is True
+
+
+@pytest.mark.asyncio
+async def test_interrupt_invokes_handler(server):
+    called = False
+
+    async def handler():
+        nonlocal called
+        called = True
+
+    server.interrupt_handler = handler
+
+    async with connect(_uri(server)) as ws:
+        await ws.send(json.dumps({"type": "interrupt"}))
+        await asyncio.sleep(0.05)
+        assert called is True
+
+
+@pytest.mark.asyncio
 async def test_unknown_message_type(server):
     async with connect(_uri(server)) as ws:
         await ws.send(json.dumps({"type": "unknown_type"}))
@@ -144,6 +177,13 @@ async def test_missing_type_field(server):
 
 @pytest.mark.asyncio
 async def test_binary_forwarded_when_listening(server):
+    received: list[bytes] = []
+
+    async def audio_handler(data: bytes):
+        received.append(data)
+
+    server.audio_handler = audio_handler
+
     async with connect(_uri(server)) as ws:
         await ws.send(json.dumps({"type": "start_listening"}))
         await asyncio.sleep(0.02)
@@ -151,6 +191,7 @@ async def test_binary_forwarded_when_listening(server):
         await ws.send(audio)
         await asyncio.sleep(0.05)
         assert server.received_audio[-1] == audio
+        assert received == [audio]
 
 
 @pytest.mark.asyncio
@@ -187,3 +228,36 @@ async def test_send_when_no_client(server):
     # Should not raise
     await server.send_json({"type": "state_change", "state": "idle"})
     await server.send_audio(b"\x00")
+
+
+@pytest.mark.asyncio
+async def test_approve_and_reject_tool_call_handlers(server):
+    approved: list[tuple[str, bool]] = []
+    rejected: list[tuple[str, bool]] = []
+
+    async def approve(call_id: str, always: bool):
+        approved.append((call_id, always))
+
+    async def reject(call_id: str, always: bool):
+        rejected.append((call_id, always))
+
+    server.approve_tool_call_handler = approve
+    server.reject_tool_call_handler = reject
+
+    async with connect(_uri(server)) as ws:
+        await ws.send(json.dumps({"type": "approve_tool_call", "call_id": "call_1", "always": True}))
+        await ws.send(json.dumps({"type": "reject_tool_call", "call_id": "call_2"}))
+        await asyncio.sleep(0.05)
+
+    assert approved == [("call_1", True)]
+    assert rejected == [("call_2", False)]
+
+
+@pytest.mark.asyncio
+async def test_get_state_returns_current_app_state(server):
+    server.app_state = AppState.THINKING
+
+    async with connect(_uri(server)) as ws:
+        await ws.send(json.dumps({"type": "get_state"}))
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+        assert resp == {"type": "state_change", "state": "thinking"}

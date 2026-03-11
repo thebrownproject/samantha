@@ -6,7 +6,21 @@ import json
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-VALID_VOICES = {"alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"}
+VALID_VOICES = {
+    "alloy",
+    "ash",
+    "ballad",
+    "cedar",
+    "coral",
+    "echo",
+    "fable",
+    "marin",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+    "verse",
+}
 VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 VALID_TURN_DETECTION_TYPES = {"semantic_vad", "server_vad"}
 
@@ -16,7 +30,7 @@ class Config:
     safe_mode: bool = True
     confirm_destructive: bool = True
     memory_enabled: bool = True
-    model_name: str = "gpt-4o-realtime-preview"
+    model_name: str = "gpt-realtime"
     reasoning_model: str = "gpt-5-mini-2025-08-07"
     transcription_model: str = "gpt-4o-mini-transcribe"
     voice: str = "ash"

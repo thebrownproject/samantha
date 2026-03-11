@@ -11,6 +11,7 @@ def test_backend_samantha_modules():
     expected = [
         "__init__.py", "main.py", "agents.py", "tools.py",
         "memory.py", "ws_server.py", "config.py", "prompts.py",
+        "runtime.py",
     ]
     for f in expected:
         assert (pkg / f).exists(), f"Missing backend module: samantha/{f}"

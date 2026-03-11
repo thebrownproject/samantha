@@ -187,6 +187,8 @@ Swift -> Python:
 {"type": "interrupt"}
 {"type": "set_voice", "voice": "alloy"}
 {"type": "inject_context", "text": "..."}
+{"type": "approve_tool_call", "call_id": "call_123", "always": false}
+{"type": "reject_tool_call", "call_id": "call_123", "always": false}
 {"type": "get_state"}
 ```
 
@@ -196,6 +198,8 @@ Python -> Swift:
 {"type": "transcript", "role": "user|assistant", "text": "...", "final": true}
 {"type": "tool_start", "name": "reason_deeply", "args": {"task": "..."}}
 {"type": "tool_end", "name": "reason_deeply", "result": "..."}
+{"type": "tool_approval_required", "name": "file_write", "call_id": "call_123", "args": {"path": "..."}}
+{"type": "clear_playback"}
 {"type": "error", "message": "..."}
 ```
 

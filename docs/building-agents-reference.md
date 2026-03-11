@@ -65,6 +65,11 @@ realtime_config = {
 4. Backend can optionally send raw `response.cancel` for explicit control.
 5. Swift clears local playback queue and resumes user capture.
 
+### Tool approvals
+1. Backend emits `{"type":"tool_approval_required", ...}` when a destructive tool needs approval.
+2. Swift responds with `{"type":"approve_tool_call","call_id":"..."}` or `{"type":"reject_tool_call","call_id":"..."}`.
+3. Backend resumes or rejects the pending tool call and logs the decision.
+
 ## 6) Delegation Tool Pattern
 
 Use this when the active realtime agent needs deeper reasoning.

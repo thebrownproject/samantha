@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from enum import StrEnum
@@ -58,6 +59,21 @@ def msg_tool_end(name: str, result: str | None = None) -> dict[str, Any]:
     return msg
 
 
+def msg_tool_approval_required(
+    name: str,
+    call_id: str,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    msg: dict[str, Any] = {
+        "type": "tool_approval_required",
+        "name": name,
+        "call_id": call_id,
+    }
+    if args is not None:
+        msg["args"] = args
+    return msg
+
+
 def msg_clear_playback() -> dict[str, str]:
     return {"type": "clear_playback"}
 
@@ -72,6 +88,7 @@ def msg_error(message: str) -> dict[str, str]:
 StateCallback = Callable[[AppState], Any]
 TranscriptCallback = Callable[[dict[str, Any]], Any]
 ToolCallback = Callable[[dict[str, Any]], Any]
+ApprovalCallback = Callable[[dict[str, Any]], Any]
 AudioCallback = Callable[[bytes], Any]
 ErrorCallback = Callable[[dict[str, str]], Any]
 
@@ -89,8 +106,10 @@ class EventDispatcher:
         self._on_state_change: list[StateCallback] = []
         self._on_transcript: list[TranscriptCallback] = []
         self._on_tool_event: list[ToolCallback] = []
+        self._on_tool_approval: list[ApprovalCallback] = []
         self._on_audio: list[AudioCallback] = []
         self._on_error: list[ErrorCallback] = []
+        self._transcript_snapshots: dict[str, tuple[str, str, bool]] = {}
 
     def on_state_change(self, cb: StateCallback) -> None:
         self._on_state_change.append(cb)
@@ -100,6 +119,9 @@ class EventDispatcher:
 
     def on_tool_event(self, cb: ToolCallback) -> None:
         self._on_tool_event.append(cb)
+
+    def on_tool_approval(self, cb: ApprovalCallback) -> None:
+        self._on_tool_approval.append(cb)
 
     def on_audio(self, cb: AudioCallback) -> None:
         self._on_audio.append(cb)
@@ -137,6 +159,52 @@ class EventDispatcher:
         for cb in self._on_transcript:
             cb(msg)
 
+    def _parse_tool_args(self, raw: str | None) -> dict[str, Any] | None:
+        if not raw:
+            return None
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    def _emit_history_transcript(self, item: Any) -> None:
+        if getattr(item, "type", None) != "message":
+            return
+
+        role = getattr(item, "role", None)
+        if role not in _VALID_ROLES:
+            return
+
+        content = getattr(item, "content", None) or []
+        fragments: list[str] = []
+        for entry in content:
+            entry_type = getattr(entry, "type", None)
+            text: str | None = None
+            if entry_type in {"text", "input_text"}:
+                text = getattr(entry, "text", None)
+            elif entry_type in {"audio", "input_audio"}:
+                text = getattr(entry, "transcript", None)
+
+            cleaned = text.strip() if isinstance(text, str) else ""
+            if cleaned and (not fragments or cleaned != fragments[-1]):
+                fragments.append(cleaned)
+
+        if not fragments:
+            return
+
+        item_id = getattr(item, "item_id", None)
+        if not isinstance(item_id, str) or not item_id:
+            return
+
+        transcript = " ".join(fragments)
+        final = True if role == "user" else getattr(item, "status", None) == "completed"
+        snapshot = (role, transcript, final)
+        if self._transcript_snapshots.get(item_id) == snapshot:
+            return
+        self._transcript_snapshots[item_id] = snapshot
+        self.emit_transcript(transcript, role, final=final)
+
     def _handle_audio(self, event: Any) -> None:
         self.set_state(AppState.SPEAKING)
         data = getattr(event, "data", None) or getattr(event, "audio", None)
@@ -154,7 +222,7 @@ class EventDispatcher:
         self.set_state(AppState.THINKING)
         tool = getattr(event, "tool", None)
         name = getattr(tool, "name", "unknown") if tool else "unknown"
-        msg = msg_tool_start(name)
+        msg = msg_tool_start(name, self._parse_tool_args(getattr(event, "arguments", None)))
         for cb in self._on_tool_event:
             cb(msg)
 
@@ -164,6 +232,19 @@ class EventDispatcher:
         output = getattr(event, "output", None)
         msg = msg_tool_end(name, str(output) if output is not None else None)
         for cb in self._on_tool_event:
+            cb(msg)
+
+    def _handle_tool_approval_required(self, event: Any) -> None:
+        self.set_state(AppState.THINKING)
+        tool = getattr(event, "tool", None)
+        name = getattr(tool, "name", "unknown") if tool else "unknown"
+        call_id = getattr(event, "call_id", "")
+        msg = msg_tool_approval_required(
+            name,
+            call_id,
+            self._parse_tool_args(getattr(event, "arguments", None)),
+        )
+        for cb in self._on_tool_approval:
             cb(msg)
 
     def _handle_agent_end(self, _event: Any) -> None:
@@ -177,11 +258,29 @@ class EventDispatcher:
             cb(msg)
 
     def _handle_raw_model_event(self, event: Any) -> None:
-        data = getattr(event, "data", None)
-        if not isinstance(data, dict):
-            return
-        if data.get("type") == "input_audio_buffer.speech_started":
+        payload = getattr(event, "data", None)
+        payload_type = None
+        if isinstance(payload, dict):
+            payload_type = payload.get("type")
+        else:
+            payload_type = getattr(payload, "type", None)
+            if payload_type == "raw_server_event":
+                raw_data = getattr(payload, "data", None)
+                if isinstance(raw_data, dict):
+                    payload_type = raw_data.get("type")
+                else:
+                    payload_type = getattr(raw_data, "type", payload_type)
+
+        if payload_type == "input_audio_buffer.speech_started":
             self.set_state(AppState.LISTENING)
+
+    def _handle_history_added(self, event: Any) -> None:
+        self._emit_history_transcript(getattr(event, "item", None))
+
+    def _handle_history_updated(self, event: Any) -> None:
+        history = getattr(event, "history", None) or []
+        for item in history:
+            self._emit_history_transcript(item)
 
     # Handler dispatch table
     _handlers: ClassVar[dict[str, Callable[[EventDispatcher, Any], None]]] = {
@@ -190,7 +289,10 @@ class EventDispatcher:
         "audio_interrupted": _handle_audio_interrupted,
         "tool_start": _handle_tool_start,
         "tool_end": _handle_tool_end,
+        "tool_approval_required": _handle_tool_approval_required,
         "agent_end": _handle_agent_end,
         "error": _handle_error,
         "raw_model_event": _handle_raw_model_event,
+        "history_added": _handle_history_added,
+        "history_updated": _handle_history_updated,
     }

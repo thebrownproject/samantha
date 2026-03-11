@@ -8,6 +8,7 @@ from samantha.agents import create_voice_agent
 from samantha.config import load_config
 from samantha.mcp_integration import create_mcp_server
 from samantha.memory import MemoryStore
+from samantha.runtime import RealtimeRuntime
 from samantha.storage import bootstrap_storage
 from samantha.tools import configure_memory
 from samantha.ws_server import start_server
@@ -40,11 +41,13 @@ async def _run() -> None:
             mcp_servers = []
 
     # Create agent
-    agent, _runner_config = create_voice_agent(cfg, mcp_servers=mcp_servers or None)
+    agent, runner_config = create_voice_agent(cfg, mcp_servers=mcp_servers or None)
     logger.info("Agent '%s' ready (model=%s, voice=%s)", agent.name, cfg.model_name, cfg.voice)
 
     # Start WebSocket server
     ws = await start_server(cfg)
+    runtime = RealtimeRuntime(cfg, ws, agent=agent, runner_config=runner_config)
+    await runtime.start()
     logger.info("Samantha backend running on ws://%s:%d", cfg.ws_host, cfg.ws_port)
 
     # Wait for shutdown signal
@@ -57,6 +60,7 @@ async def _run() -> None:
         await stop.wait()
     finally:
         logger.info("Shutting down...")
+        await runtime.stop()
         await ws.stop()
         if cfg.memory_enabled:
             await memory.close()
