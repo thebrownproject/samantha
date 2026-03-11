@@ -197,6 +197,12 @@ Python -> Swift:
 bd ready --json
 ```
 
+**After a fresh clone, if local issues are missing:**
+
+```bash
+bd init --from-jsonl --force --prefix sam
+```
+
 **Create new issues:**
 
 ```bash

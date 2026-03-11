@@ -40,10 +40,14 @@ macOS app (SwiftUI/AppKit, AVAudioEngine, hotkey, desktop context tools)
   - `capture_display`
 - Backend-only integration coverage exists for the app-tool RPC path via the mock websocket harness
 - Swift app source exists, but the checked-in Xcode project/workspace is still pending, so full macOS build verification is not yet complete
+- The first Mac bring-up work is now staged in Beads under epic `sam-nze` and mirrored in `docs/first-mac-session.md`
 
 ## Development
 
 ```bash
+# Rehydrate Beads after a fresh clone, if needed
+bd init --from-jsonl --force --prefix sam
+
 # Backend bootstrap
 cd backend
 ./.venv/bin/ruff check samantha tests

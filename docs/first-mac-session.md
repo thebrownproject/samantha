@@ -10,6 +10,24 @@ The goal of the first session is not to finish the app. The goal is to get a bui
 - playback
 - one verified visual-context path
 
+## Tracking
+
+The current Beads epic for this work is `sam-nze`.
+
+- `sam-nze.1` Create the Xcode project, app target, and smoke test target
+- `sam-nze.2` Wire the checked-in Swift sources, plist, entitlements, and KeyboardShortcuts package
+- `sam-nze.3` Fix and verify WebSocket lifecycle and backend handshake behavior
+- `sam-nze.4` Verify the audio capture and playback loop and tighten AudioManager teardown behavior
+- `sam-nze.5` Validate `frontmost_app_context` and `capture_display` on real macOS permissions
+- `sam-nze.6` Run the first Mac session checklist end to end and record findings
+- `sam-nze.7` Clean app docs and backlog after the first Mac run
+
+If this repo is freshly cloned onto the Mac and `bd` does not yet show these issues locally, rehydrate the tracker from the repo-backed JSONL before starting work:
+
+```bash
+bd init --from-jsonl --force --prefix sam
+```
+
 ## 1. Create the Xcode project
 
 Create a new macOS App project in Xcode with:
