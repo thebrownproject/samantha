@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let desktopContextToolExecutor = DesktopContextToolExecutor()
 
     private var audioFrameCount: Int = 0
+    private var playbackFrameCount: Int = 0
 
     lazy var consoleActions: DevConsoleActions = DevConsoleActions(
         onTalkToggle: { [weak self] in self?.toggleListening() },
@@ -106,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 try await webSocketClient.startListening()
                 audioFrameCount = 0
+                playbackFrameCount = 0
                 audioManager.startCapture { [weak self] chunk in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
@@ -118,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 consoleState.appState = .listening
                 consoleState.isCapturing = true
+                consoleState.log("Mic capture started")
                 consoleState.log("Listening started")
             } catch {
                 consoleState.appState = .error
@@ -130,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             audioManager.stopInputCapture()
             consoleState.isCapturing = false
+            consoleState.log("Mic capture stopped")
             do {
                 try await webSocketClient.stopListening()
                 consoleState.log("Listening stopped")
@@ -241,11 +245,16 @@ extension AppDelegate: WebSocketClientDelegate {
     func webSocketClient(_ client: WebSocketClient, didReceiveAudio data: Data) {
         audioManager.enqueueAudio(data: data)
         consoleState.isPlaying = true
+        playbackFrameCount += 1
+        if playbackFrameCount % 50 == 0 {
+            consoleState.log("Audio: received \(data.count) bytes (frame \(playbackFrameCount))", level: .debug)
+        }
     }
 
     func webSocketClientDidClearPlayback(_ client: WebSocketClient) {
         audioManager.stopPlayback()
         consoleState.isPlaying = false
+        playbackFrameCount = 0
         consoleState.log("clear_playback received")
     }
 

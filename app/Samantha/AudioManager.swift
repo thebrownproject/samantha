@@ -92,7 +92,7 @@ final class AudioManager: ObservableObject {
         audioQueue.async { [weak self] in
             guard let self else { return }
             self.capturing = false
-            self.teardown()
+            self.teardownInput()
         }
         isCapturing = false
     }
@@ -201,9 +201,14 @@ final class AudioManager: ObservableObject {
     // MARK: - Engine Setup (audioQueue)
 
     private func setupAndStart(onChunk: @escaping @Sendable (Data) -> Void) throws {
-        teardown()
+        teardownInput()
 
-        let engine = AVAudioEngine()
+        let engine: AVAudioEngine
+        if let existing = self.audioEngine {
+            engine = existing
+        } else {
+            engine = AVAudioEngine()
+        }
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
 
@@ -220,10 +225,6 @@ final class AudioManager: ObservableObject {
             throw AudioCaptureError.invalidInputFormat
         }
 
-        // Mixer handles multi-channel -> mono downmix and provides a stable tap point.
-        let mixer = AVAudioMixerNode()
-        engine.attach(mixer)
-
         // Determine capture format: downmix multi-channel inputs to mono for
         // consistent pipeline behavior across mic hardware (e.g. MacBook Pro 9-ch array).
         let captureFormat: AVAudioFormat
@@ -236,9 +237,15 @@ final class AudioManager: ObservableObject {
             captureFormat = inputFormat
         }
 
+        // Stop the engine briefly to attach the mixer and reconfigure input graph.
+        // Preserves the playerNode so playback resumes without a full rebuild.
+        let wasRunning = engine.isRunning
+        if wasRunning { engine.stop() }
+
+        let mixer = AVAudioMixerNode()
         mixer.volume = 1.0
+        engine.attach(mixer)
         engine.connect(input, to: mixer, format: captureFormat)
-        engine.prepare()
 
         // Build converter if device format differs from target.
         var audioConverter: AVAudioConverter?
@@ -272,7 +279,13 @@ final class AudioManager: ObservableObject {
             }
         }
 
+        engine.prepare()
         try engine.start()
+
+        // Re-play the playerNode if it was attached before the engine restart
+        if wasRunning, let player = self.playerNode, !player.isPlaying {
+            player.play()
+        }
 
         self.audioEngine = engine
         self.mixerNode = mixer
@@ -283,14 +296,24 @@ final class AudioManager: ObservableObject {
         log.info("Capture started: \(inputFormat.channelCount)ch \(Int(inputFormat.sampleRate))Hz -> 24kHz PCM16 mono")
     }
 
+    /// Remove the input tap and mixer, leaving the engine and playerNode alive for playback.
+    private func teardownInput() {
+        mixerNode?.removeTap(onBus: 0)
+        if let mixer = mixerNode, let engine = audioEngine {
+            engine.disconnectNodeInput(mixer)
+            engine.detach(mixer)
+        }
+        mixerNode = nil
+        converter = nil
+    }
+
+    /// Full engine shutdown for disconnect/error/app lifecycle.
     private func teardown() {
+        teardownInput()
         playerNode?.stop()
         playerNode = nil
         audioEngine?.stop()
-        mixerNode?.removeTap(onBus: 0)
         audioEngine = nil
-        mixerNode = nil
-        converter = nil
     }
 
     // MARK: - Format Conversion (audioQueue)
