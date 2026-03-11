@@ -67,6 +67,7 @@ cd backend
 - [IPC Protocol](docs/ipc-protocol.md)
 - [Frontend Handoff](docs/frontend-handoff.md)
 - [Design Direction](docs/design-direction.md)
+- [First Mac Session](docs/first-mac-session.md)
 - [Implementation Reference](docs/building-agents-reference.md)
 
 ## Verification

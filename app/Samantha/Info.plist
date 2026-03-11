@@ -18,5 +18,7 @@
     <string>14.0</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Samantha needs microphone access for voice interaction.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Samantha uses Apple Events to read lightweight context from supported apps like Safari, Chrome, and Finder.</string>
 </dict>
 </plist>

@@ -10,6 +10,7 @@ Read `docs/ipc-protocol.md` for the websocket contract and versioning rules.
 Read `docs/frontend-handoff.md` for backend-event to widget-state mapping.
 Read `docs/design-direction.md` for the visual and motion direction.
 Read `docs/observability.md` for runtime signals and incident triage.
+Read `docs/first-mac-session.md` for the concrete Xcode/macOS bring-up checklist.
 Read `docs/building-agents-reference.md` for implementation details used while building.
 
 ```
