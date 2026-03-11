@@ -15,15 +15,28 @@ __pycache__/
 htmlcov/
 
 # Local issue-tracking / Dolt state
-.beads/
+.beads/*
+!.beads/README.md
+!.beads/config.yaml
+!.beads/issues.jsonl
 .dolt/
 .doltcfg/
 beads/
 beads_sam/
 config.yaml
+.beads/dolt/
+.beads/*.log
+.beads/daemon.lock
+.beads/last-touched
+.beads/.local_version
+.beads/metadata.json
+.beads/interactions.jsonl
 
 # Swift / Xcode local state
 DerivedData/
 .build/
 *.xcuserstate
 xcuserdata/
+
+# Dolt database files (added by bd init)
+*.db
