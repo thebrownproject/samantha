@@ -74,8 +74,8 @@ final class ToolRegistry: @unchecked Sendable {
 // MARK: - Default tool registration
 
 extension ToolRegistry {
-    /// Register all 8 tool schemas with placeholder handlers.
-    /// Actual implementations are wired in by later tasks.
+    /// Register all 8 tool schemas. safe_bash, applescript, file_read, file_write
+    /// have real handlers; remaining tools use placeholders until implemented.
     static func withDefaultTools(confirmDestructive: Bool = false) -> ToolRegistry {
         let registry = ToolRegistry()
 
@@ -90,7 +90,7 @@ extension ToolRegistry {
             ],
             required: ["command"],
             needsApproval: confirmDestructive,
-            handler: placeholder
+            handler: safeBashHandler
         )
 
         registry.register(
@@ -104,7 +104,7 @@ extension ToolRegistry {
             ],
             required: ["script"],
             needsApproval: confirmDestructive,
-            handler: placeholder
+            handler: applescriptHandler
         )
 
         registry.register(
@@ -117,7 +117,7 @@ extension ToolRegistry {
                 ]),
             ],
             required: ["path"],
-            handler: placeholder
+            handler: handleFileRead
         )
 
         registry.register(
@@ -135,7 +135,7 @@ extension ToolRegistry {
             ],
             required: ["path", "content"],
             needsApproval: confirmDestructive,
-            handler: placeholder
+            handler: handleFileWrite
         )
 
         registry.register(
