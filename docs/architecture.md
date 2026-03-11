@@ -20,6 +20,11 @@ See `docs/ipc-protocol.md` for the websocket contract, `docs/frontend-handoff.md
 |  | (Option+S)       |  | Settings UI                 |   |
 |  +------------------+  | (SwiftUI sheet)             |   |
 |                        +-----------------------------+   |
+|  +------------------+  +-----------------------------+   |
+|  | Desktop Context  |  | - Frontmost app/window     |   |
+|  | Tools            |  | - Full display screenshot  |   |
+|  | (macOS native)   |  | - No approval gate         |   |
+|  +------------------+  +-----------------------------+   |
 |  +------------------+                                    |
 |  | IPC Client       |                                    |
 |  | (WebSocket to    |                                    |
@@ -56,6 +61,7 @@ See `docs/ipc-protocol.md` for the websocket contract, `docs/frontend-handoff.md
 |  | Tool Layer                                          |  |
 |  | - AppleScript MCP tools                             |  |
 |  | - bash, file_read, file_write, web_search          |  |
+|  | - frontmost_app_context, capture_display           |  |
 |  | - memory_save, memory_search                        |  |
 |  +--------------------------------------------------+   |
 |            |                                             |
@@ -121,6 +127,16 @@ Widget behavior rules:
 - Swift streams mic chunks to Python over local WebSocket
 - Python streams output audio chunks back to Swift
 - Swift stops playback immediately on local barge-in signals
+
+#### Desktop context and capture
+- Swift owns the macOS-native desktop context tools
+- Frontmost app metadata should come from AppKit/Accessibility, not from the Python backend
+- Display screenshots should come from native macOS display-capture APIs
+- The early-stage scope is limited to:
+  - `frontmost_app_context`
+  - `capture_display`
+- `capture_display` is available to the agent without an extra approval prompt in this first phase
+- `selected_text`, specialized active-window capture, and generalized computer use are intentionally deferred
 
 ### 2. Python Backend
 
@@ -189,6 +205,8 @@ This tool can be called by the active realtime agent when it needs deeper reason
 
 See `docs/ipc-protocol.md` for the versioning policy and the canonical wire contract. See `docs/frontend-handoff.md` for how those messages should drive the widget, transcript overlay, approvals, and playback behavior.
 
+The screenshot/context tools add a second IPC use case beyond voice streaming: backend-initiated app-tool RPC. The Swift app remains the executor for macOS-native context and capture work, while the Python backend exposes those capabilities as agent tools.
+
 ### Binary frames (audio)
 - Swift -> Python: raw PCM16 audio chunks
 - Python -> Swift: raw PCM16 output chunks
@@ -250,6 +268,8 @@ The runtime appends JSON strings into `daily_logs.entry` for structured replay a
 - `bash` and file tools require explicit allow/deny policy.
 - Destructive actions require confirmation unless explicitly disabled.
 - Tool inputs are validated and fail fast on invalid paths/commands.
+- Full display capture is agent-available without a separate approval gate in the first context-capture phase.
+- Generalized computer use is out of scope until the screenshot/context phase is stable.
 
 ## Build Sequence
 

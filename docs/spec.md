@@ -39,6 +39,8 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - **Bash tool**: Run shell commands (git, scripts, file operations)
 - **File read/write**: Create, read, and edit files anywhere on the system
 - **Web search**: Look things up on the internet
+- **Frontmost app context**: Read the active app name, window title, and current URL or file path when available
+- **Display capture**: Take an on-demand full display screenshot for visual context
 - **App control**: Open apps, switch windows, control playback
 
 ### Persistent Memory
@@ -82,6 +84,9 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - No always-listening wake word (future, start with hotkey activation)
 - No third-party integrations beyond AppleScript and bash
 - No generic chat-window-first experience as the primary interface
+- No generalized screenshot-driven clicking/typing computer-use loop in the first macOS context-capture phase
+- No `selected_text` tool in the first macOS context-capture phase
+- No specialized active-window screenshot tool in the first macOS context-capture phase
 
 ## Settings
 
@@ -99,5 +104,7 @@ Think Scarlett Johansson in "Her", but real, running locally on your Mac.
 - All memory stored locally (`~/.samantha/`)
 - API key in macOS Keychain
 - Audio streamed to OpenAI for processing (not stored by us)
+- App-context reads are limited to the active app/window metadata exposed locally on the Mac
+- Display capture is an on-demand local action, not continuous background recording
 - No telemetry, no analytics, no accounts
 - User can clear all memory at any time

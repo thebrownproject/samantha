@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import contextlib
 import json
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Any, ClassVar
@@ -15,7 +17,7 @@ from websockets.exceptions import ConnectionClosed
 
 from samantha.config import VALID_VOICES, Config
 from samantha.events import AppState, msg_error, msg_state_change
-from samantha.protocol import attach_protocol_version, validate_protocol_message
+from samantha.protocol import attach_protocol_version, protocol_message, validate_protocol_message
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ class WSServer:
         self.received_audio: collections.deque[bytes] = collections.deque(maxlen=4096)
         self.injected_contexts: list[str] = []
         self.interrupt_count: int = 0
+        self._pending_app_tool_calls: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     @property
     def address(self) -> tuple[str, int]:
@@ -68,6 +71,7 @@ class WSServer:
         )
 
     async def stop(self) -> None:
+        self._fail_pending_app_tool_calls("WebSocket server stopped")
         if self._server:
             self._server.close()
             await self._server.wait_closed()
@@ -89,6 +93,48 @@ class WSServer:
         self.app_state = state
         await self.send_json(msg_state_change(state))
 
+    async def call_app_tool(
+        self,
+        tool: str,
+        *,
+        args: dict[str, Any] | None = None,
+        timeout: float = 15.0,
+    ) -> dict[str, Any]:
+        if self._ws is None or self.state != ConnectionState.CONNECTED:
+            raise RuntimeError("Swift client is not connected")
+        if not isinstance(tool, str) or not tool:
+            raise ValueError("App tool name must be a non-empty string")
+
+        request_id = uuid.uuid4().hex
+        future = asyncio.get_running_loop().create_future()
+        self._pending_app_tool_calls[request_id] = future
+
+        try:
+            await self.send_json(
+                protocol_message(
+                    "app_tool_call",
+                    request_id=request_id,
+                    tool=tool,
+                    args=args or {},
+                )
+            )
+            response = await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError as exc:
+            raise RuntimeError(f"Timed out waiting for app_tool_result for {tool}") from exc
+        finally:
+            pending = self._pending_app_tool_calls.get(request_id)
+            if pending is future:
+                self._pending_app_tool_calls.pop(request_id, None)
+
+        if not bool(response.get("ok")):
+            error = response.get("error") or f"App tool {tool} failed"
+            raise RuntimeError(str(error))
+
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise RuntimeError(f"App tool {tool} returned invalid result payload")
+        return result
+
     async def _handler(self, ws: ServerConnection) -> None:
         if self._ws is not None:
             await ws.close(1013, "Only one client allowed")
@@ -108,6 +154,7 @@ class WSServer:
         except ConnectionClosed:
             pass
         finally:
+            self._fail_pending_app_tool_calls("Swift client disconnected")
             self._ws = None
             self.state = ConnectionState.DISCONNECTED
             self.listening = False
@@ -208,9 +255,37 @@ class WSServer:
     async def _on_get_state(self, _ws: ServerConnection, _msg: dict) -> None:
         await self.send_json(msg_state_change(self.app_state))
 
+    async def _on_app_tool_result(self, ws: ServerConnection, msg: dict) -> None:
+        request_id = msg.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            await self._send_ws_json(ws, msg_error("Missing 'request_id' for app_tool_result"))
+            return
+
+        ok = msg.get("ok")
+        if not isinstance(ok, bool):
+            await self._send_ws_json(ws, msg_error("Missing 'ok' for app_tool_result"))
+            return
+
+        future = self._pending_app_tool_calls.pop(request_id, None)
+        if future is None:
+            await self._send_ws_json(
+                ws,
+                msg_error(f"Unknown request_id for app_tool_result: {request_id}"),
+            )
+            return
+
+        if not future.done():
+            future.set_result(msg)
+
     async def _send_ws_json(self, ws: ServerConnection, msg: dict[str, Any]) -> None:
         with contextlib.suppress(ConnectionClosed):
             await ws.send(json.dumps(attach_protocol_version(msg)))
+
+    def _fail_pending_app_tool_calls(self, message: str) -> None:
+        while self._pending_app_tool_calls:
+            _request_id, future = self._pending_app_tool_calls.popitem()
+            if not future.done():
+                future.set_exception(RuntimeError(message))
 
     _text_handlers: ClassVar[dict[str, Any]] = {
         "start_listening": _on_start_listening,
@@ -221,6 +296,7 @@ class WSServer:
         "approve_tool_call": _on_approve_tool_call,
         "reject_tool_call": _on_reject_tool_call,
         "get_state": _on_get_state,
+        "app_tool_result": _on_app_tool_result,
     }
 
 

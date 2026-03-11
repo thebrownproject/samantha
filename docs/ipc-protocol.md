@@ -76,6 +76,18 @@ Every JSON text message in both directions must include:
 {"protocol_version": 1, "type": "get_state"}
 ```
 
+### App tool result
+
+This is how the Swift app answers a backend-initiated app-tool request.
+
+```json
+{"protocol_version": 1, "type": "app_tool_result", "request_id": "req_123", "ok": true, "result": {"app_name": "Safari"}}
+```
+
+```json
+{"protocol_version": 1, "type": "app_tool_result", "request_id": "req_123", "ok": false, "error": "Screen capture unavailable"}
+```
+
 ## Python -> Swift Messages
 
 ### State change
@@ -128,6 +140,25 @@ Every JSON text message in both directions must include:
 {"protocol_version": 1, "type": "error", "message": "Unsupported protocol_version: 2. Supported versions: 1"}
 ```
 
+### App tool call
+
+This is how the backend asks the Swift app to perform macOS-native context or capture work.
+
+```json
+{"protocol_version": 1, "type": "app_tool_call", "request_id": "req_123", "tool": "frontmost_app_context", "args": {}}
+```
+
+```json
+{"protocol_version": 1, "type": "app_tool_call", "request_id": "req_456", "tool": "capture_display", "args": {}}
+```
+
+`tool` is currently one of:
+
+- `frontmost_app_context`
+- `capture_display`
+
+These are internal app-tool RPC calls, not approval prompts. In the first macOS visual-context phase, `capture_display` is an on-demand full-display screenshot without an extra confirmation step.
+
 ## Validation Rules
 
 - Audio frames are accepted only while the backend is in a listening turn.
@@ -135,6 +166,8 @@ Every JSON text message in both directions must include:
 - Missing or invalid required fields are rejected with an `error` message.
 - Unknown message types are rejected with an `error` message.
 - Outbound backend messages are versioned before being sent on the wire.
+- `app_tool_call` / `app_tool_result` pairs are matched by `request_id`.
+- Screenshot payloads travel inside `app_tool_result.result` as JSON with metadata plus a base64 image string, not as extra binary websocket frames.
 
 ## Notes
 

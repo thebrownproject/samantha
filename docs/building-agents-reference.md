@@ -139,7 +139,19 @@ cd backend && .venv/bin/python -m samantha.mock_client --auto-approve --idle-tim
 
 The harness speaks protocol version `1`, prints JSON/audio events, and can auto-approve or auto-reject tool approval prompts.
 
-## 12) Structured Tool and Log Contracts
+## 12) First macOS Visual Context Phase
+
+- The Swift app executes macOS-native visual-context work over `app_tool_call` / `app_tool_result`.
+- The only first-phase desktop context tools are:
+  - `frontmost_app_context`
+  - `capture_display`
+- `frontmost_app_context` should return app metadata plus window title, and it should include a current URL or file path when a supported app exposes one cheaply.
+- `capture_display` is an on-demand full-display screenshot, returned as JSON metadata plus a base64 PNG payload.
+- The backend can summarize the screenshot with a vision model before speaking, but the capture itself stays local to the Mac.
+- `capture_display` does not have an extra approval gate in this first phase.
+- `selected_text`, specialized active-window capture, and generalized screenshot-driven computer use remain explicitly deferred.
+
+## 13) Structured Tool and Log Contracts
 
 ### `web_search`
 
@@ -180,7 +192,7 @@ Memory promotion signal:
 - `always=true` maps to a persistent approval preference at the SDK/session layer when supported.
 - The frontend behavior for approval prompts is defined in `docs/frontend-handoff.md`.
 
-## 13) Sources to Keep Handy
+## 14) Sources to Keep Handy
 
 - Agents Python realtime guide: `https://openai.github.io/openai-agents-python/realtime/guide/`
 - Agents Python realtime transport: `https://openai.github.io/openai-agents-python/realtime/transport/`

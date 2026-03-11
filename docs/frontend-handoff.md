@@ -72,6 +72,12 @@ This document defines how the future Swift client should translate backend webso
 - Keep the widget in the backend-reported state, usually `thinking`.
 - Do not infer approval completion locally; wait for subsequent backend events.
 
+### `app_tool_call`
+
+- Treat backend `app_tool_call` messages as internal execution requests, not user-facing approval prompts.
+- Execute the requested macOS-native tool and answer with `app_tool_result` keyed by the same `request_id`.
+- `frontmost_app_context` and `capture_display` should run quietly in the background and should not steal focus.
+
 ### `error`
 
 - Surface the error message in compact text near the widget or transcript overlay.

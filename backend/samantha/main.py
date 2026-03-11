@@ -10,7 +10,7 @@ from samantha.mcp_integration import create_mcp_server
 from samantha.memory import MemoryStore
 from samantha.runtime import RealtimeRuntime
 from samantha.storage import bootstrap_storage
-from samantha.tools import configure_memory
+from samantha.tools import configure_app_tool_caller, configure_memory
 from samantha.ws_server import start_server
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ async def _run() -> None:
 
     # Start WebSocket server
     ws = await start_server(cfg)
+    configure_app_tool_caller(lambda tool, args=None: ws.call_app_tool(tool, args=args))
     runtime = RealtimeRuntime(
         cfg,
         ws,

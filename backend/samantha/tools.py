@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _cfg: Config = Config()
 _memory: MemoryStore | None = None
 _openai_client: openai.AsyncOpenAI | None = None
+_app_tool_caller = None
 
 
 def format_tool_error(tool_name: str, error: str) -> str:
@@ -33,6 +34,10 @@ def format_tool_error(tool_name: str, error: str) -> str:
     short = error.split("\n")[0].strip()[:200]
     logger.error("Tool %s failed: %s", tool_name, error)
     return f"Error in {tool_name}: {short}"
+
+
+def _serialize_json_payload(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
 
 
 _RE_CODE_BLOCK = re.compile(r"```[\s\S]*?```")
@@ -182,6 +187,10 @@ DELEGATION_FALLBACK = (
 )
 
 MAX_BACKOFF_DELAY = 30.0
+DEFAULT_DISPLAY_PROMPT = (
+    "Describe the current screen concisely for Samantha. Focus on the active app, "
+    "the visible page or document, notable dialogs, and any UI the user is likely referring to."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,6 +360,38 @@ def _get_openai_client() -> openai.AsyncOpenAI:
     return _openai_client
 
 
+def configure_app_tool_caller(caller) -> None:
+    """Set the async caller used to invoke macOS-native app tools via IPC."""
+    global _app_tool_caller
+    _app_tool_caller = caller
+
+
+async def _call_app_tool(tool_name: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    if _app_tool_caller is None:
+        raise RuntimeError("app tool caller not configured")
+    result = await _app_tool_caller(tool_name, args or {})
+    if not isinstance(result, dict):
+        raise RuntimeError(f"{tool_name} returned invalid result payload")
+    return result
+
+
+def _extract_response_text(response: Any) -> str:
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+
+    parts: list[str] = []
+    for item in getattr(response, "output", []) or []:
+        if getattr(item, "type", None) != "message":
+            continue
+        for block in getattr(item, "content", []) or []:
+            text = getattr(block, "text", None)
+            cleaned = text.strip() if isinstance(text, str) else ""
+            if cleaned:
+                parts.append(cleaned)
+    return " ".join(parts).strip()
+
+
 def _serialize_web_search_response(
     *,
     query: str,
@@ -411,6 +452,64 @@ async def _web_search(query: str) -> str:
 async def web_search(query: str) -> str:
     """Search the web and return relevant results with titles, snippets, and URLs."""
     return await _web_search(query)
+
+
+async def _frontmost_app_context() -> str:
+    try:
+        result = await _call_app_tool("frontmost_app_context")
+    except Exception as exc:
+        return format_tool_error("frontmost_app_context", str(exc))
+    return _serialize_json_payload(result)
+
+
+@function_tool
+async def frontmost_app_context() -> str:
+    """Return structured context about the frontmost app and window."""
+    return await _frontmost_app_context()
+
+
+async def _capture_display(question: str = "") -> str:
+    try:
+        capture = await _call_app_tool("capture_display")
+    except Exception as exc:
+        return format_tool_error("capture_display", str(exc))
+
+    image_base64 = capture.get("image_base64")
+    mime_type = str(capture.get("mime_type", "image/png"))
+    if not isinstance(image_base64, str) or not image_base64.strip():
+        return format_tool_error("capture_display", "missing image_base64 in capture payload")
+
+    prompt = question.strip() if question.strip() else DEFAULT_DISPLAY_PROMPT
+    try:
+        response = await _get_openai_client().responses.create(
+            model="gpt-4o-mini",
+            input=[{
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {"type": "input_image", "image_url": f"data:{mime_type};base64,{image_base64}"},
+                ],
+            }],
+        )
+        summary = _extract_response_text(response)
+    except Exception as exc:
+        return format_tool_error("capture_display", str(exc))
+
+    payload: dict[str, Any] = {
+        "summary": condense_for_voice(summary or "No useful screen details were available."),
+        "mime_type": mime_type,
+    }
+    for key in ("width", "height", "display_id"):
+        value = capture.get(key)
+        if value is not None:
+            payload[key] = value
+    return _serialize_json_payload(payload)
+
+
+@function_tool
+async def capture_display(question: str = "") -> str:
+    """Capture the current display and return a concise vision summary plus metadata."""
+    return await _capture_display(question)
 
 
 @function_tool
@@ -490,5 +589,6 @@ def register_tools(config: Config | None = None) -> list:
         configure_tools(config)
     return [
         safe_bash, file_read, file_write, reason_deeply, web_search,
+        frontmost_app_context, capture_display,
         memory_save, memory_search, daily_log_append, daily_log_search,
     ]

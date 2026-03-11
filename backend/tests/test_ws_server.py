@@ -302,3 +302,89 @@ async def test_get_state_returns_current_app_state(server):
             "type": "state_change",
             "state": "thinking",
         }
+
+
+@pytest.mark.asyncio
+async def test_call_app_tool_sends_request_and_receives_result(server):
+    async with connect(_uri(server)) as ws:
+        task = asyncio.create_task(server.call_app_tool("frontmost_app_context"))
+
+        request = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+        assert request["type"] == "app_tool_call"
+        assert request["protocol_version"] == IPC_PROTOCOL_VERSION
+        assert request["tool"] == "frontmost_app_context"
+        assert request["args"] == {}
+
+        await ws.send(
+            _msg(
+                "app_tool_result",
+                request_id=request["request_id"],
+                ok=True,
+                result={"app_name": "Safari", "window_title": "OpenAI"},
+            )
+        )
+
+        result = await asyncio.wait_for(task, timeout=1.0)
+        assert result == {"app_name": "Safari", "window_title": "OpenAI"}
+
+
+@pytest.mark.asyncio
+async def test_call_app_tool_surfaces_error_response(server):
+    async with connect(_uri(server)) as ws:
+        task = asyncio.create_task(server.call_app_tool("capture_display"))
+
+        request = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+        await ws.send(
+            _msg(
+                "app_tool_result",
+                request_id=request["request_id"],
+                ok=False,
+                error="Screen capture unavailable",
+            )
+        )
+
+        with pytest.raises(RuntimeError, match="Screen capture unavailable"):
+            await asyncio.wait_for(task, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_call_app_tool_requires_connected_client(server):
+    with pytest.raises(RuntimeError, match="Swift client is not connected"):
+        await server.call_app_tool("frontmost_app_context")
+
+
+@pytest.mark.asyncio
+async def test_call_app_tool_times_out_without_result(server):
+    async with connect(_uri(server)):
+        with pytest.raises(RuntimeError, match="Timed out waiting for app_tool_result"):
+            await server.call_app_tool("capture_display", timeout=0.01)
+
+
+@pytest.mark.asyncio
+async def test_unknown_app_tool_result_request_id(server):
+    async with connect(_uri(server)) as ws:
+        await ws.send(
+            _msg(
+                "app_tool_result",
+                request_id="missing",
+                ok=True,
+                result={"app_name": "Finder"},
+            )
+        )
+
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+        assert resp == {
+            "protocol_version": IPC_PROTOCOL_VERSION,
+            "type": "error",
+            "message": "Unknown request_id for app_tool_result: missing",
+        }
+
+
+@pytest.mark.asyncio
+async def test_pending_app_tool_call_fails_on_disconnect(server):
+    async with connect(_uri(server)) as ws:
+        task = asyncio.create_task(server.call_app_tool("frontmost_app_context"))
+        _request = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.0))
+
+    with pytest.raises(RuntimeError, match="Swift client disconnected"):
+        await asyncio.wait_for(task, timeout=1.0)

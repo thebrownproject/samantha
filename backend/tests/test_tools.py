@@ -13,17 +13,22 @@ from openai.types.responses.response_usage import InputTokensDetails, OutputToke
 from samantha.config import Config
 from samantha.tools import (
     DELEGATION_FALLBACK,
+    _capture_display,
     _file_read,
     _file_write,
+    _frontmost_app_context,
     _needs_approval_check,
     _reason_deeply,
     _safe_bash,
     _web_search,
+    capture_display,
     condense_for_voice,
+    configure_app_tool_caller,
     configure_tools,
     estimate_usage_cost_usd,
     file_write,
     format_tool_error,
+    frontmost_app_context,
     register_tools,
     resolve_pricing_model,
     safe_bash,
@@ -34,8 +39,10 @@ from samantha.tools import (
 @pytest.fixture(autouse=True)
 def _reset_config(tmp_path):
     configure_tools(Config(safe_mode=False, data_dir=tmp_path / ".samantha"))
+    configure_app_tool_caller(None)
     yield
     configure_tools(Config())
+    configure_app_tool_caller(None)
 
 
 # -- safe_bash --
@@ -162,13 +169,13 @@ async def test_write_safe_mode_blocks_outside_home():
 
 def test_register_tools_returns_all():
     tools = register_tools()
-    assert len(tools) == 9
+    assert len(tools) == 11
 
 
 def test_register_tools_with_config():
     cfg = Config(safe_mode=False)
     tools = register_tools(cfg)
-    assert len(tools) == 9
+    assert len(tools) == 11
 
 
 def test_register_tools_includes_reason_deeply():
@@ -181,6 +188,18 @@ def test_register_tools_includes_web_search():
     tools = register_tools()
     names = [t.name for t in tools]
     assert "web_search" in names
+
+
+def test_register_tools_includes_visual_context_tools():
+    tools = register_tools()
+    names = [t.name for t in tools]
+    assert "frontmost_app_context" in names
+    assert "capture_display" in names
+
+
+def test_visual_context_tool_wrappers_are_named():
+    assert frontmost_app_context.name == "frontmost_app_context"
+    assert capture_display.name == "capture_display"
 
 
 # -- reason_deeply --
@@ -329,6 +348,56 @@ async def test_web_search_handles_api_error():
         "results": [],
         "summary": "",
     }
+
+
+async def test_frontmost_app_context_returns_structured_json():
+    async def fake_caller(tool_name: str, args: dict[str, str]):
+        assert tool_name == "frontmost_app_context"
+        assert args == {}
+        return {"app_name": "Safari", "window_title": "OpenAI"}
+
+    configure_app_tool_caller(fake_caller)
+    payload = json.loads(await _frontmost_app_context())
+    assert payload == {"app_name": "Safari", "window_title": "OpenAI"}
+
+
+async def test_frontmost_app_context_requires_caller():
+    configure_app_tool_caller(None)
+    result = await _frontmost_app_context()
+    assert "Error in frontmost_app_context" in result
+
+
+async def test_capture_display_returns_summary_json():
+    async def fake_caller(tool_name: str, args: dict[str, str]):
+        assert tool_name == "capture_display"
+        assert args == {}
+        return {
+            "mime_type": "image/png",
+            "image_base64": "ZmFrZQ==",
+            "width": 1280,
+            "height": 720,
+        }
+
+    mock_response = SimpleNamespace(output_text="Safari is open to the OpenAI homepage.")
+    mock_client = MagicMock()
+    mock_client.responses.create = AsyncMock(return_value=mock_response)
+
+    configure_app_tool_caller(fake_caller)
+    with patch("samantha.tools._get_openai_client", return_value=mock_client):
+        payload = json.loads(await _capture_display())
+
+    assert payload == {
+        "height": 720,
+        "mime_type": "image/png",
+        "summary": "Safari is open to the OpenAI homepage.",
+        "width": 1280,
+    }
+
+
+async def test_capture_display_handles_missing_caller():
+    configure_app_tool_caller(None)
+    result = await _capture_display()
+    assert "Error in capture_display" in result
 
 
 # -- format_tool_error --

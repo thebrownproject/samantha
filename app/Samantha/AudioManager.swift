@@ -88,6 +88,15 @@ final class AudioManager: ObservableObject {
         isPlaying = false
     }
 
+    func stopInputCapture() {
+        audioQueue.async { [weak self] in
+            guard let self else { return }
+            self.capturing = false
+            self.teardown()
+        }
+        isCapturing = false
+    }
+
     // MARK: - Playback
 
     /// Enqueue PCM16 24kHz mono audio bytes for immediate playback.

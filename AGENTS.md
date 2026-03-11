@@ -21,7 +21,7 @@ Swift app (floating presence widget, audio I/O, hotkey)
 Python backend (OpenAI Agents SDK)
     |-- RealtimeAgent (voice session specialist)
     |-- Delegation tool -> gpt-5-mini-2025-08-07 (deep reasoning)
-    |-- Tools: bash, file_read, file_write, web_search, memory
+    |-- Tools: bash, file_read, file_write, web_search, frontmost_app_context, capture_display, memory
     |-- AppleScript MCP (calendar, reminders, finder, music, system)
     |-- Memory: SQLite + FTS5 + sqlite-vec (~/.samantha/)
 ```
@@ -51,20 +51,18 @@ Samantha/
 │   │   ├── config.py                   # Settings management (~/.samantha/config.json)
 │   │   └── prompts.py                  # System prompts
 │   └── tests/
-├── app/                                # Swift macOS app
-│   ├── Samantha.xcodeproj
-│   ├── Samantha/
-│   │   ├── SamanthaApp.swift
-│   │   ├── OrbWindow.swift
-│   │   ├── OrbView.swift
-│   │   ├── AudioManager.swift
-│   │   ├── HotkeyManager.swift
-│   │   ├── WebSocketClient.swift
-│   │   ├── BackendManager.swift
-│   │   ├── SettingsView.swift
-│   │   ├── TranscriptOverlay.swift
-│   │   └── KeychainHelper.swift
-│   └── SamanthaTests/
+├── app/                                # Swift macOS app sources
+│   └── Samantha/
+│       ├── SamanthaApp.swift
+│       ├── OrbWindow.swift
+│       ├── OrbView.swift
+│       ├── AudioManager.swift
+│       ├── HotkeyManager.swift
+│       ├── WebSocketClient.swift
+│       ├── DesktopContextToolExecutor.swift
+│       ├── SettingsView.swift
+│       ├── TranscriptOverlay.swift
+│       └── KeychainHelper.swift
 └── scripts/
     └── dev.sh
 ```
@@ -126,6 +124,7 @@ Build in this order. Phase 1 is fully testable without Swift.
 4. **Local-first memory** in `~/.samantha/` with no cloud account dependency.
 5. **AppleScript via MCP** to reuse mature system-control integrations.
 6. **Push-to-talk first** for V1 scope and reliability.
+7. **First-phase macOS visual context stays narrow**: `frontmost_app_context` plus `capture_display`, with more invasive computer-use features deferred.
 
 ## IPC Protocol
 
