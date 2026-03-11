@@ -1,0 +1,34 @@
+name: Samantha
+
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  bundleIdPrefix: com.thebrownproject
+
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: "2.0.0"
+
+targets:
+  Samantha:
+    type: application
+    platform: macOS
+    sources: [Samantha]
+    settings:
+      base:
+        INFOPLIST_FILE: Samantha/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Samantha/Samantha.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.thebrownproject.samantha
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5"
+    dependencies:
+      - package: KeyboardShortcuts
+
+  SamanthaTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [SamanthaTests]
+    dependencies:
+      - target: Samantha

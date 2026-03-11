@@ -1,0 +1,461 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		24F9FA549B09CC5BC06FEA60 /* OrbWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F9C2DD59F808F26D76E551 /* OrbWindow.swift */; };
+		2AEEABDDDD798D8982E88FB2 /* OrbView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4CBFDBE8CD0CFA8F84F73EB /* OrbView.swift */; };
+		408EF1239AACED4926129868 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE67F7177C8D31B7C38B50AF /* HotkeyManager.swift */; };
+		707079B64EB4ACFC43543CF3 /* SamanthaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2CA0F804A17F515B6E381B /* SamanthaApp.swift */; };
+		74CFAB5A189E9A81651A5663 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA2BF3533D54D0EBB6B62E8 /* AudioManager.swift */; };
+		A14806571C28327CABAAB9D7 /* TranscriptOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED074A3E4F091DE2F44BBAA5 /* TranscriptOverlay.swift */; };
+		AAC40FC8CEF002215B08D254 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = A74A883FFC3B978388C70CEE /* KeyboardShortcuts */; };
+		AB12F860FA15ACC6049521AC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427FE0F2D960289E8EE509F6 /* SettingsView.swift */; };
+		CA25201D962F77F57B0D59FD /* SamanthaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7589F53D72CF088E0B40F91 /* SamanthaTests.swift */; };
+		D5DD2F7407F8D82E408C70C3 /* DesktopContextToolExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F409D92F672D0AE3AD7A6E9 /* DesktopContextToolExecutor.swift */; };
+		DF2885915DF74C9DE6D4E79C /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55D6A80B2DACD523C28E245F /* WebSocketClient.swift */; };
+		E4E3CE9C25DD2A4F701ECFE8 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8115B6CC562788A2B3279BD9 /* KeychainHelper.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		55E1AE177AF033AF74F40D0D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A9B4E5F85A95596C56B48BD6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F1C2E0935D03A50322C4FDF7;
+			remoteInfo = Samantha;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		098950A3DC4FF670CF1E42B0 /* SamanthaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SamanthaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D2CA0F804A17F515B6E381B /* SamanthaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamanthaApp.swift; sourceTree = "<group>"; };
+		3F409D92F672D0AE3AD7A6E9 /* DesktopContextToolExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopContextToolExecutor.swift; sourceTree = "<group>"; };
+		427FE0F2D960289E8EE509F6 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		55D6A80B2DACD523C28E245F /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
+		5B67F32B62986BF62A012A87 /* Samantha.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Samantha.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6908B064DE948311BD6A88EE /* Samantha.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Samantha.entitlements; sourceTree = "<group>"; };
+		80F9C2DD59F808F26D76E551 /* OrbWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbWindow.swift; sourceTree = "<group>"; };
+		8115B6CC562788A2B3279BD9 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		ACA2BF3533D54D0EBB6B62E8 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
+		B35727F848BEAE22A0D08517 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B7589F53D72CF088E0B40F91 /* SamanthaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamanthaTests.swift; sourceTree = "<group>"; };
+		ED074A3E4F091DE2F44BBAA5 /* TranscriptOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptOverlay.swift; sourceTree = "<group>"; };
+		EE67F7177C8D31B7C38B50AF /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		F4CBFDBE8CD0CFA8F84F73EB /* OrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		81670D754D15F30C0C13A38D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAC40FC8CEF002215B08D254 /* KeyboardShortcuts in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0C2B8777EA04D49770D63C5C /* SamanthaTests */ = {
+			isa = PBXGroup;
+			children = (
+				B7589F53D72CF088E0B40F91 /* SamanthaTests.swift */,
+			);
+			path = SamanthaTests;
+			sourceTree = "<group>";
+		};
+		76F1F1C99AE01301E74D4675 = {
+			isa = PBXGroup;
+			children = (
+				A032A0AAE0CA4256880390A0 /* Samantha */,
+				0C2B8777EA04D49770D63C5C /* SamanthaTests */,
+				C1659C6BBEE8450EAB6A46D1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A032A0AAE0CA4256880390A0 /* Samantha */ = {
+			isa = PBXGroup;
+			children = (
+				ACA2BF3533D54D0EBB6B62E8 /* AudioManager.swift */,
+				3F409D92F672D0AE3AD7A6E9 /* DesktopContextToolExecutor.swift */,
+				EE67F7177C8D31B7C38B50AF /* HotkeyManager.swift */,
+				B35727F848BEAE22A0D08517 /* Info.plist */,
+				8115B6CC562788A2B3279BD9 /* KeychainHelper.swift */,
+				F4CBFDBE8CD0CFA8F84F73EB /* OrbView.swift */,
+				80F9C2DD59F808F26D76E551 /* OrbWindow.swift */,
+				6908B064DE948311BD6A88EE /* Samantha.entitlements */,
+				0D2CA0F804A17F515B6E381B /* SamanthaApp.swift */,
+				427FE0F2D960289E8EE509F6 /* SettingsView.swift */,
+				ED074A3E4F091DE2F44BBAA5 /* TranscriptOverlay.swift */,
+				55D6A80B2DACD523C28E245F /* WebSocketClient.swift */,
+			);
+			path = Samantha;
+			sourceTree = "<group>";
+		};
+		C1659C6BBEE8450EAB6A46D1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5B67F32B62986BF62A012A87 /* Samantha.app */,
+				098950A3DC4FF670CF1E42B0 /* SamanthaTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		941F68F90740BD852F13F6DA /* SamanthaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2C84AC6D4009772E27F88AE0 /* Build configuration list for PBXNativeTarget "SamanthaTests" */;
+			buildPhases = (
+				2D69D545AA21B33529244C5B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1D4B0B106EBDB7A50B5CCEA2 /* PBXTargetDependency */,
+			);
+			name = SamanthaTests;
+			packageProductDependencies = (
+			);
+			productName = SamanthaTests;
+			productReference = 098950A3DC4FF670CF1E42B0 /* SamanthaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		F1C2E0935D03A50322C4FDF7 /* Samantha */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BD2D51804B83D7756D4744F3 /* Build configuration list for PBXNativeTarget "Samantha" */;
+			buildPhases = (
+				CDF0719E0CF7AF7733F7074C /* Sources */,
+				81670D754D15F30C0C13A38D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Samantha;
+			packageProductDependencies = (
+				A74A883FFC3B978388C70CEE /* KeyboardShortcuts */,
+			);
+			productName = Samantha;
+			productReference = 5B67F32B62986BF62A012A87 /* Samantha.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A9B4E5F85A95596C56B48BD6 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = C391637B2EB66A1093A7931C /* Build configuration list for PBXProject "Samantha" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 76F1F1C99AE01301E74D4675;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				33894C69A4C7DA951A285CEB /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C1659C6BBEE8450EAB6A46D1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F1C2E0935D03A50322C4FDF7 /* Samantha */,
+				941F68F90740BD852F13F6DA /* SamanthaTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2D69D545AA21B33529244C5B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CA25201D962F77F57B0D59FD /* SamanthaTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CDF0719E0CF7AF7733F7074C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				74CFAB5A189E9A81651A5663 /* AudioManager.swift in Sources */,
+				D5DD2F7407F8D82E408C70C3 /* DesktopContextToolExecutor.swift in Sources */,
+				408EF1239AACED4926129868 /* HotkeyManager.swift in Sources */,
+				E4E3CE9C25DD2A4F701ECFE8 /* KeychainHelper.swift in Sources */,
+				2AEEABDDDD798D8982E88FB2 /* OrbView.swift in Sources */,
+				24F9FA549B09CC5BC06FEA60 /* OrbWindow.swift in Sources */,
+				707079B64EB4ACFC43543CF3 /* SamanthaApp.swift in Sources */,
+				AB12F860FA15ACC6049521AC /* SettingsView.swift in Sources */,
+				A14806571C28327CABAAB9D7 /* TranscriptOverlay.swift in Sources */,
+				DF2885915DF74C9DE6D4E79C /* WebSocketClient.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1D4B0B106EBDB7A50B5CCEA2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F1C2E0935D03A50322C4FDF7 /* Samantha */;
+			targetProxy = 55E1AE177AF033AF74F40D0D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		046ABB191E89974ABC609263 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		0ACCF0C81CE12B4921B9C023 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.thebrownproject.SamanthaTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Samantha.app/Contents/MacOS/Samantha";
+			};
+			name = Release;
+		};
+		0C0DE4AD70D1A201C4BBD2F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.thebrownproject.SamanthaTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Samantha.app/Contents/MacOS/Samantha";
+			};
+			name = Debug;
+		};
+		52898DC2D8E2116D4CAFAF08 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Samantha/Samantha.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Samantha/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thebrownproject.samantha;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5;
+			};
+			name = Debug;
+		};
+		B53B5689E6142910FA9D62DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Samantha/Samantha.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = Samantha/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thebrownproject.samantha;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5;
+			};
+			name = Release;
+		};
+		D8BD600E56EA1D27C5D46FB8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2C84AC6D4009772E27F88AE0 /* Build configuration list for PBXNativeTarget "SamanthaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0C0DE4AD70D1A201C4BBD2F7 /* Debug */,
+				0ACCF0C81CE12B4921B9C023 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BD2D51804B83D7756D4744F3 /* Build configuration list for PBXNativeTarget "Samantha" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				52898DC2D8E2116D4CAFAF08 /* Debug */,
+				B53B5689E6142910FA9D62DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C391637B2EB66A1093A7931C /* Build configuration list for PBXProject "Samantha" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D8BD600E56EA1D27C5D46FB8 /* Debug */,
+				046ABB191E89974ABC609263 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		33894C69A4C7DA951A285CEB /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A74A883FFC3B978388C70CEE /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 33894C69A4C7DA951A285CEB /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A9B4E5F85A95596C56B48BD6 /* Project object */;
+}
