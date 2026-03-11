@@ -24,6 +24,7 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
     let desktopContextToolExecutor = DesktopContextToolExecutor()
     private(set) var orbController: OrbWindowController?
     private(set) var toolRegistry: ToolRegistry?
+    private(set) var functionCallHandler: FunctionCallHandler?
     private var config: SpikeConfig = .defaults
     private var deepgramAPIKey: String?
     private var openRouterAPIKey: String?
@@ -68,10 +69,14 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
         deepgramAPIKey = KeychainHelper.loadAPIKey(for: .deepgramAPIKey)
         openRouterAPIKey = KeychainHelper.loadAPIKey(for: .openRouterAPIKey)
 
-        toolRegistry = ToolRegistry.withDefaultTools(confirmDestructive: config.confirmDestructive)
-        if let registry = toolRegistry {
-            DesktopTools.register(on: registry)
-        }
+        let registry = ToolRegistry.withDefaultTools(confirmDestructive: config.confirmDestructive)
+        DesktopTools.register(on: registry, executor: desktopContextToolExecutor)
+        toolRegistry = registry
+
+        functionCallHandler = FunctionCallHandler(
+            toolRegistry: registry,
+            agentClient: agentClient
+        )
 
         consoleState.log("Spike app launched (Voice Agent mode)")
     }
@@ -130,74 +135,6 @@ final class SpikeAppDelegate: NSObject, NSApplicationDelegate {
         consoleState.isPlaying = audioManager.isPlaying
         orbController?.orbState.appState = newState
     }
-
-    // MARK: - Voice Agent settings
-
-    private func buildSettings() -> [String: Any] {
-        var settings: [String: Any] = [:]
-
-        settings["audio"] = [
-            "input": ["encoding": "linear16", "sample_rate": 24000],
-            "output": ["encoding": "linear16", "sample_rate": 24000, "container": "none"],
-        ]
-
-        settings["agent"] = buildAgentConfig()
-
-        return settings
-    }
-
-    private func buildAgentConfig() -> [String: Any] {
-        var agent: [String: Any] = [:]
-
-        agent["listen"] = ["model": "nova-3"]
-
-        var think: [String: Any] = [:]
-        if config.llmProvider == "openrouter", let orKey = openRouterAPIKey {
-            think["provider"] = [
-                "type": "custom",
-                "url": "https://openrouter.ai/api/v1",
-                "headers": ["Authorization": "Bearer \(orKey)"],
-            ]
-            think["model"] = config.llmModel
-        } else {
-            think["provider"] = ["type": "open_ai"]
-            think["model"] = config.llmModel
-        }
-
-        if let registry = toolRegistry {
-            let defs = registry.toolDefinitions()
-            if !defs.isEmpty {
-                think["functions"] = defs.compactMap { def -> [String: Any]? in
-                    return encodeFunctionDef(def)
-                }
-            }
-        }
-
-        agent["think"] = think
-
-        agent["speak"] = ["model": config.voice]
-
-        agent["context"] = [
-            "messages": [["role": "system", "content": Prompts.system]],
-        ]
-
-        agent["greeting"] = "Hey there!"
-
-        return agent
-    }
-
-    private func encodeFunctionDef(_ def: ToolDefinition) -> [String: Any]? {
-        let fn = def.function
-        guard let paramsData = try? JSONEncoder().encode(fn.parameters),
-              let params = try? JSONSerialization.jsonObject(with: paramsData) as? [String: Any] else {
-            return nil
-        }
-        return [
-            "name": fn.name,
-            "description": fn.description,
-            "parameters": params,
-        ]
-    }
 }
 
 // MARK: - HotkeyManagerDelegate
@@ -219,7 +156,17 @@ extension SpikeAppDelegate: DeepgramAgentDelegate {
             self.consoleState.connectionState = .connected
             self.consoleState.log("Voice Agent connected (request: \(requestId))")
 
-            let settings = self.buildSettings()
+            guard let orKey = self.openRouterAPIKey, let registry = self.toolRegistry else {
+                self.consoleState.log("Missing OpenRouter key or tool registry", level: .error)
+                return
+            }
+
+            let settings = VoiceAgentSettingsBuilder.build(
+                config: self.config,
+                toolRegistry: registry,
+                openRouterKey: orKey,
+                greeting: "Hey there!"
+            )
             self.agentClient.sendSettings(settings)
         }
     }
@@ -305,29 +252,13 @@ extension SpikeAppDelegate: DeepgramAgentDelegate {
             guard let self else { return }
             self.consoleState.log("Tool call: \(name)(\(arguments.prefix(100)))")
 
-            guard let registry = self.toolRegistry else {
-                self.consoleState.log("No tool registry -- returning error", level: .warning)
+            guard let handler = self.functionCallHandler else {
+                self.consoleState.log("No function call handler -- returning error", level: .warning)
                 self.agentClient.sendFunctionCallResponse(id: id, name: name, output: "Error: tool system not initialized")
                 return
             }
 
-            let toolCall = ToolCall(
-                id: id,
-                type: "function",
-                function: FunctionCall(name: name, arguments: arguments)
-            )
-
-            let result: String
-            do {
-                result = try await registry.execute(toolCall: toolCall)
-            } catch {
-                let errorMsg = "Tool execution failed: \(error.localizedDescription)"
-                self.consoleState.log(errorMsg, level: .error)
-                self.agentClient.sendFunctionCallResponse(id: id, name: name, output: errorMsg)
-                return
-            }
-            self.consoleState.log("Tool result: \(name) -> \(result.prefix(200))", level: .debug)
-            self.agentClient.sendFunctionCallResponse(id: id, name: name, output: result)
+            handler.handle(id: id, name: name, arguments: arguments)
         }
     }
 
