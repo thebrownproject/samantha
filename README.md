@@ -19,7 +19,7 @@ macOS app (SwiftUI/AppKit, AVAudioEngine, hotkey, desktop context tools)
                   - RealtimeAgent / RealtimeRunner
                   - Tool layer (bash, files, web search, visual context)
                   - Memory layer (SQLite + FTS5 + sqlite-vec)
-                  - AppleScript MCP integration
+                  - AppleScript via osascript
 ```
 
 ## Codebases
@@ -41,6 +41,7 @@ macOS app (SwiftUI/AppKit, AVAudioEngine, hotkey, desktop context tools)
 - Backend-only integration coverage exists for the app-tool RPC path via the mock websocket harness
 - Swift app source exists, but the checked-in Xcode project/workspace is still pending, so full macOS build verification is not yet complete
 - The first Mac bring-up work is now staged in Beads under epic `sam-nze` and mirrored in `docs/first-mac-session.md`
+- A pure Swift alternative using Deepgram Voice Agent API (no Python backend) has been extracted to [DeepVoice](https://github.com/thebrownproject/deepvoice)
 
 ## Development
 
